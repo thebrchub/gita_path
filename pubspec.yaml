@@ -14,6 +14,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_native_splash: ^2.4.6
   rename_app: ^1.6.5
+  shared_preferences: ^2.2.2  # For storing user data locally
+  share_plus: ^7.2.1
+  audioplayers: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -30,10 +33,20 @@ flutter_native_splash:
   image: assets/images/app_logo.png
   color: "#FFFFFF"
 
-fonts:
-  # Primary font for English
-  - family: Poppins
-    fonts:
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/app_logo.png
+    - assets/images/splash_logo.png
+    - assets/icons/google_logo.png
+    - assets/audios/gita_path_app.mp3
+    - assets/images/tanpura.png
+  
+  fonts:
+    # Primary font for English
+    - family: Poppins
+      fonts:
         - asset: fonts/Poppins-Regular.ttf
           weight: 400
         - asset: fonts/Poppins-Medium.ttf
@@ -43,20 +56,26 @@ fonts:
         - asset: fonts/Poppins-Bold.ttf
           weight: 700
     
-  # For Hindi/Sanskrit (Devanagari script)
-  - family: NotoSansDevanagari
-    fonts:
+    # For Hindi/Sanskrit (Devanagari script)
+    - family: NotoSansDevanagari
+      fonts:
         - asset: fonts/NotoSansDevanagari-Regular.ttf
           weight: 400
         - asset: fonts/NotoSansDevanagari-Medium.ttf
           weight: 500
         - asset: fonts/NotoSansDevanagari-Bold.ttf
           weight: 700
+    - family: NotoSerifDevanagari
+      fonts:
+        - asset: fonts/NotoSerifDevanagari-Bold.ttf
+          weight: 700
+        - asset: fonts/NotoSerifDevanagari-Regular.ttf
+          weight: 400
     
-  # For Tamil script
-  - family: NotoSansTamil
-    fonts:
-        - asset: fonts/NotoSansTamil-Regular.ttf
+    # For Tamil script
+    - family: NotoSansTamil
+      fonts:
+        - asset: fonts/NotoSansTamil-Medium.ttf
           weight: 400
         - asset: fonts/NotoSansTamil-Medium.ttf
           weight: 500
@@ -64,18 +83,12 @@ fonts:
           weight: 700
     
     # Optional: Serif font for quotes/emphasis
-  - family: Crimson
-    fonts:
+    - family: Crimson
+      fonts:
         - asset: fonts/CrimsonText-Regular.ttf
           weight: 400
         - asset: fonts/CrimsonText-Italic.ttf
           weight: 400
           style: italic
         - asset: fonts/CrimsonText-SemiBold.ttf
-          weight: 600  
-
-flutter:
-  uses-material-design: true
-  assets:
-    - assets/images/app_logo.png
-    - assets/images/splash_logo.png
+          weight: 600

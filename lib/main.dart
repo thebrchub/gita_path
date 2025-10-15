@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screens/splash_screen.dart';
-import 'theme/colors.dart';
+import 'theme/app_theme.dart';
+import 'screens/navigation_bar.dart';
 
 void main() {
   runApp(const GitaAIApp());
@@ -14,11 +15,7 @@ class GitaAIApp extends StatelessWidget {
     return MaterialApp(
       title: 'Gita Path',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primaryColor: AppColors.primary,
-        scaffoldBackgroundColor: AppColors.bg,
-        fontFamily: 'Poppins',
-      ),
+      theme: AppTheme.lightTheme, // Use centralized theme
       home: const SplashScreen(),
     );
   }

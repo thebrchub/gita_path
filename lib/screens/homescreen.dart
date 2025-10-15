@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
-import '../theme/colors.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/app_drawer.dart';
 import 'chapterlistscreen.dart';
 import 'askkrishnascreen.dart';
 import 'donationscreen.dart';
+import '../theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,7 +17,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   late AnimationController _floatingController;
+  late AudioPlayer _audioPlayer;
+  late ScrollController _scrollController;
+  bool _isPlaying = false;
   int currentVerseIndex = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   // Collection of daily wisdom quotes from Gita
   final List<Map<String, String>> dailyVerses = [
@@ -68,13 +75,77 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       vsync: this,
     )..repeat(reverse: true);
     
-    // Randomize initial verse
+  _scrollController = ScrollController();
+    
+    _audioPlayer = AudioPlayer();
+    _audioPlayer.setReleaseMode(ReleaseMode.loop);
+    _loadAudioPreference();
     currentVerseIndex = Random().nextInt(dailyVerses.length);
+  }
+
+  // _onScroll removed because header shadow is disabled
+
+  Future<void> _loadAudioPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasOpenedBefore = prefs.getBool('hasOpenedBefore') ?? false;
+    final isAudioEnabled = prefs.getBool('isAudioEnabled') ?? true;
+    
+    if (!hasOpenedBefore) {
+      await prefs.setBool('hasOpenedBefore', true);
+      await prefs.setBool('isAudioEnabled', true);
+      _playTanpura();
+    } else if (isAudioEnabled) {
+      _playTanpura();
+    } else {
+      setState(() => _isPlaying = false);
+    }
+  }
+
+  Future<void> _saveAudioPreference(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isAudioEnabled', enabled);
+  }
+
+  Future<void> _playTanpura() async {
+    try {
+      await _audioPlayer.setSource(AssetSource('audios/gita_path_app.mp3'));
+      await _audioPlayer.setVolume(0.3);
+      await _audioPlayer.resume();
+      setState(() => _isPlaying = true);
+      await _saveAudioPreference(true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Audio error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleAudio() async {
+    try {
+      if (_isPlaying) {
+        await _audioPlayer.pause();
+        setState(() => _isPlaying = false);
+        await _saveAudioPreference(false);
+      } else {
+        await _audioPlayer.resume();
+        setState(() => _isPlaying = true);
+        await _saveAudioPreference(true);
+      }
+    } catch (e) {
+      // Error handling
+    }
   }
 
   @override
   void dispose() {
     _floatingController.dispose();
+    _scrollController.dispose();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -89,338 +160,399 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final currentVerse = dailyVerses[currentVerseIndex];
     
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: const AppDrawer(),
+      // Keep this enabled for edge swipe
+      drawerEnableOpenDragGesture: true,
+  // Make the edge swipe area larger so users can open the drawer more easily
+  // Use 70% of screen width but cap at 360 logical pixels for very wide screens.
+  // This gives an intentionally very wide swipe target on phones.
+  drawerEdgeDragWidth: min(MediaQuery.of(context).size.width * 0.7, 360),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              const Color(0xFFFFF5E6), // Soft saffron
+              const Color(0xFFFFF5E6),
               const Color(0xFFFFE4CC),
-              const Color(0xFFE3F2FD), // Pale blue
+              const Color(0xFFE3F2FD),
               const Color(0xFFBBDEFB),
             ],
             stops: const [0.0, 0.3, 0.7, 1.0],
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                children: [
-                  const SizedBox(height: 20),
-                  
-                  // Top bar with Sanskrit text and language icon
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Opacity(
-                        opacity: 0.6,
-                        child: Text(
-                          'श्रीभगवानुवाच',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.deepOrange.shade700,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 1,
-                          ),
+          child: Column(
+            children: [
+              // 🔥 COMPACT HEADER with animated shadow
+              AnimatedContainer(
+                // slightly faster animation for snappier feedback
+                duration: const Duration(milliseconds: 160),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    // No shadow per user request
+                    // (kept empty so there is no visual elevation)
+                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.menu, color: Colors.deepOrange.shade700, size: 26),
+                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                      tooltip: 'Menu',
+                    ),
+                    Opacity(
+                      opacity: 0.7,
+                      child: Text(
+                        'श्रीभगवानुवाच',
+                        style: AppTheme.devanagari(
+                          fontSize: 16,
+                          color: Colors.deepOrange.shade700,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      IconButton(
-                        icon: Icon(Icons.language, color: Colors.deepOrange.shade700),
-                        onPressed: () => _showLanguageDialog(context),
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 20),
-                  
-                  // Hero section with floating animation
-                  AnimatedBuilder(
-                    animation: _floatingController,
-                    builder: (context, child) {
-                      return Transform.translate(
-                        offset: Offset(0, 8 * sin(_floatingController.value * 2 * pi)),
-                        child: child,
-                      );
-                    },
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.language, color: Colors.deepOrange.shade700, size: 26),
+                      onPressed: () => _showLanguageDialog(context),
+                      tooltip: 'Language',
+                    ),
+                  ],
+                ),
+              ),
+              
+              // 🔥 SCROLLABLE CONTENT with scroll controller
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  physics: const BouncingScrollPhysics(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
                       children: [
-                        // Krishna symbol with glow effect
-                        Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(
-                              colors: [
-                                Colors.orange.shade200.withOpacity(0.3),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                          child: Center(
-                            child: Container(
-                              width: 70,
-                              height: 70,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withOpacity(0.3),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.orange.shade200.withOpacity(0.4),
-                                    blurRadius: 20,
-                                    spreadRadius: 5,
-                                  ),
-                                ],
-                              ),
-                              child: Icon(
-                                Icons.auto_awesome,
-                                size: 40,
-                                color: Colors.deepOrange.shade400,
-                              ),
-                            ),
-                          ),
-                        ),
-                        
                         const SizedBox(height: 20),
                         
-                        // Main title
-                        Text(
-                          '॥ श्रीमद्भगवद्गीता ॥',
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.deepOrange.shade800,
-                            letterSpacing: 1.5,
-                            shadows: [
-                              Shadow(
-                                color: Colors.white.withOpacity(0.5),
-                                offset: const Offset(0, 2),
-                                blurRadius: 4,
+                        // Tanpura + Title Section
+                        AnimatedBuilder(
+                          animation: _floatingController,
+                          builder: (context, child) {
+                            return Transform.translate(
+                              offset: Offset(0, 8 * sin(_floatingController.value * 2 * pi)),
+                              child: child,
+                            );
+                          },
+                          child: Column(
+                            children: [
+                              // Tanpura with audio toggle
+                              GestureDetector(
+                                onTap: _toggleAudio,
+                                child: Container(
+                                  width: 100,
+                                  height: 100,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: RadialGradient(
+                                      colors: [
+                                        (_isPlaying ? Colors.orange : Colors.grey).shade200.withOpacity(0.3),
+                                        Colors.transparent,
+                                      ],
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Container(
+                                      width: 80,
+                                      height: 80,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.white.withOpacity(0.3),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: (_isPlaying ? Colors.orange : Colors.grey)
+                                                .shade200
+                                                .withOpacity(0.4),
+                                            blurRadius: 20,
+                                            spreadRadius: 5,
+                                          ),
+                                        ],
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: ClipOval(
+                                          child: ColorFiltered(
+                                            colorFilter: _isPlaying
+                                                ? const ColorFilter.mode(Colors.transparent, BlendMode.multiply)
+                                                : const ColorFilter.matrix(<double>[
+                                                    0.2126, 0.7152, 0.0722, 0, 0,
+                                                    0.2126, 0.7152, 0.0722, 0, 0,
+                                                    0.2126, 0.7152, 0.0722, 0, 0,
+                                                    0, 0, 0, 1, 0,
+                                                  ]),
+                                            child: Transform.scale(
+                                              scale: 1.2,
+                                              child: Image.asset(
+                                                'assets/images/tanpura.png',
+                                                fit: BoxFit.contain,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              
+                              const SizedBox(height: 8),
+                              
+                              Text(
+                                _isPlaying ? 'Tanpura Playing' : 'Tanpura Paused',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: _isPlaying ? Colors.deepOrange.shade600 : Colors.grey.shade600,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                              
+                              const SizedBox(height: 16),
+                              
+                              // Main title
+                              Text(
+                                '॥ श्रीमद्भगवद्गीता ॥',
+                                style: AppTheme.devanagari(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.deepOrange.shade800,
+                                ).copyWith(
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.white.withOpacity(0.5),
+                                      offset: const Offset(0, 2),
+                                      blurRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              
+                              const SizedBox(height: 8),
+                              
+                              Text(
+                                'The Eternal Song of the Lord',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade700,
+                                  fontStyle: FontStyle.italic,
+                                  letterSpacing: 0.5,
+                                ),
                               ),
                             ],
                           ),
                         ),
                         
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 32),
                         
-                        Text(
-                          'The Eternal Song of the Lord',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade700,
-                            fontStyle: FontStyle.italic,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
+                        // Daily Verse Card
+                        _buildDailyVerseCard(currentVerse),
+                        
+                        const SizedBox(height: 32),
+                        
+                        // Action Cards Grid
+                        _buildActionCards(context),
+                        
+                        const SizedBox(height: 32),
+                        
+                        // Bottom reflection message
+                        _buildReflectionCard(),
+                        
+                        const SizedBox(height: 30),
                       ],
                     ),
                   ),
-                  
-                  const SizedBox(height: 40),
-                  
-                  // Daily Verse Card (Glassmorphic)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.orange.shade200.withOpacity(0.2),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Krishna Speaks',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.deepOrange.shade700,
-                              ),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.refresh, color: Colors.deepOrange.shade600),
-                              onPressed: _changeVerse,
-                              tooltip: 'New Verse',
-                            ),
-                          ],
-                        ),
-                        
-                        const SizedBox(height: 16),
-                        
-                        // Sanskrit verse
-                        Text(
-                          currentVerse['sanskrit']!,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.deepOrange.shade900,
-                            fontWeight: FontWeight.w500,
-                            height: 1.6,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        
-                        const SizedBox(height: 16),
-                        
-                        // Divider
-                        Container(
-                          height: 1,
-                          width: 60,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.transparent,
-                                Colors.orange.shade300,
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                        
-                        const SizedBox(height: 16),
-                        
-                        // English translation
-                        Text(
-                          '"${currentVerse['text']}"',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 17,
-                            color: Colors.grey.shade800,
-                            fontStyle: FontStyle.italic,
-                            height: 1.5,
-                          ),
-                        ),
-                        
-                        const SizedBox(height: 12),
-                        
-                        // Reference
-                        Text(
-                          '— ${currentVerse['reference']}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 40),
-                  
-                  // Action Cards Grid
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 16,
-                    crossAxisSpacing: 16,
-                    childAspectRatio: 0.95,
-                    children: [
-                      _buildActionCard(
-                        context,
-                        icon: Icons.menu_book_rounded,
-                        title: 'Study Gita',
-                        subtitle: '18 Chapters\n700 Verses',
-                        gradientColors: [Color(0xFF6C63FF), Color(0xFF8B7FFF)],
-                        screen: const ChapterListScreen(),
-                      ),
-                      _buildActionCard(
-                        context,
-                        icon: Icons.psychology_rounded,
-                        title: 'Ask Krishna',
-                        subtitle: 'AI Guidance\nfor Life',
-                        gradientColors: [Color(0xFF9C27B0), Color(0xFFBA68C8)],
-                        screen: const AskKrishnaScreen(),
-                        isPremium: true,
-                      ),
-                      _buildActionCard(
-                        context,
-                        icon: Icons.volunteer_activism_rounded,
-                        title: 'Support',
-                        subtitle: 'Contribute to\nDharma',
-                        gradientColors: [Color(0xFFFF9800), Color(0xFFFFB74D)],
-                        screen: const DonationScreen(),
-                      ),
-                      _buildActionCard(
-                        context,
-                        icon: Icons.bookmark_rounded,
-                        title: 'Favorites',
-                        subtitle: 'Your Saved\nVerses',
-                        gradientColors: [Color(0xFF00BCD4), Color(0xFF4DD0E1)],
-                        screen: null,
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 40),
-                  
-                  // Bottom reflection message
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.4),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.spa_rounded,
-                          color: Colors.green.shade400,
-                          size: 28,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Close your eyes. Take a breath.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500,
-                            height: 1.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'You are not alone — Krishna walks with you.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade600,
-                            fontStyle: FontStyle.italic,
-                            height: 1.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 30),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDailyVerseCard(Map<String, String> currentVerse) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.shade200.withOpacity(0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Krishna Speaks',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.deepOrange.shade700,
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.refresh, color: Colors.deepOrange.shade600),
+                onPressed: _changeVerse,
+                tooltip: 'New Verse',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            currentVerse['sanskrit']!,
+            textAlign: TextAlign.center,
+            style: AppTheme.devanagari(
+              fontSize: 16,
+              color: Colors.deepOrange.shade900,
+              fontWeight: FontWeight.w500,
+              height: 1.6,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            height: 1,
+            width: 60,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  Colors.orange.shade300,
+                  Colors.transparent,
                 ],
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          Text(
+            '"${currentVerse['text']}"',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 17,
+              color: Colors.grey.shade800,
+              fontStyle: FontStyle.italic,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '— ${currentVerse['reference']}',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionCards(BuildContext context) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      mainAxisSpacing: 16,
+      crossAxisSpacing: 16,
+      childAspectRatio: 0.95,
+      children: [
+        _buildActionCard(
+          context,
+          icon: Icons.menu_book_rounded,
+          title: 'Study Gita',
+          subtitle: '18 Chapters\n700 Verses',
+          gradientColors: [Color(0xFF6C63FF), Color(0xFF8B7FFF)],
+          screen: const ChapterListScreen(),
         ),
+        _buildActionCard(
+          context,
+          icon: Icons.psychology_rounded,
+          title: 'Ask Krishna',
+          subtitle: 'AI Guidance\nfor Life',
+          gradientColors: [Color(0xFF9C27B0), Color(0xFFBA68C8)],
+          screen: const AskKrishnaScreen(),
+          isPremium: true,
+        ),
+        _buildActionCard(
+          context,
+          icon: Icons.volunteer_activism_rounded,
+          title: 'Support',
+          subtitle: 'Contribute to\nDharma',
+          gradientColors: [Color(0xFFFF9800), Color(0xFFFFB74D)],
+          screen: const DonationScreen(),
+        ),
+        _buildActionCard(
+          context,
+          icon: Icons.bookmark_rounded,
+          title: 'Favorites',
+          subtitle: 'Your Saved\nVerses',
+          gradientColors: [Color(0xFF00BCD4), Color(0xFF4DD0E1)],
+          screen: null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReflectionCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.3),
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.spa_rounded,
+            color: Colors.green.shade400,
+            size: 28,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Close your eyes. Take a breath.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 15,
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w500,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'You are not alone — Krishna walks with you.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+              fontStyle: FontStyle.italic,
+              height: 1.5,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -476,7 +608,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
         child: Stack(
           children: [
-            // Subtle pattern overlay
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
@@ -492,44 +623,46 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
             ),
-            
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(icon, color: Colors.white, size: 32),
+                    child: Icon(icon, color: Colors.white, size: 28),
                   ),
-                  const Spacer(),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 12,
-                      height: 1.3,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 11,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            
             if (isPremium)
               Positioned(
                 top: 12,

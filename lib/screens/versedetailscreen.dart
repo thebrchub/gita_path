@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:math';
 import '../services/api_service.dart';
-import '../theme/colors.dart';
+
 
 class VerseDetailScreen extends StatefulWidget {
   final int chapterId;
@@ -80,8 +79,7 @@ class _VerseDetailScreenState extends State<VerseDetailScreen> with TickerProvid
         child: SafeArea(
           child: Column(
             children: [
-              _buildHeader(),
-              _buildChapterIntro(),
+              _buildHeader(),  // This stays static
               Expanded(
                 child: loading ? _buildLoadingState() : _buildVersesList(),
               ),
@@ -169,7 +167,7 @@ class _VerseDetailScreenState extends State<VerseDetailScreen> with TickerProvid
       animation: _breathingController,
       builder: (context, child) {
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          margin: const EdgeInsets.fromLTRB(20, 10, 20, 16), // Keep horizontal, adjust vertical
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.6),
@@ -276,13 +274,22 @@ class _VerseDetailScreenState extends State<VerseDetailScreen> with TickerProvid
       opacity: _fadeController,
       child: ListView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        padding: const EdgeInsets.only(top: 0), // Remove vertical padding
         physics: const BouncingScrollPhysics(),
-        itemCount: verses.length,
+        itemCount: verses.length + 1, // +1 for the intro card
         itemBuilder: (context, index) {
-          final verse = verses[index];
-          final isExpanded = expandedVerseIndex == index;
-          return _buildVerseCard(verse, index, isExpanded);
+          // First item is the intro card
+          if (index == 0) {
+            return _buildChapterIntro();
+          }
+          
+          // Rest are verse cards
+          final verse = verses[index - 1]; // Adjust index
+          final isExpanded = expandedVerseIndex == (index - 1);
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _buildVerseCard(verse, index - 1, isExpanded),
+          );
         },
       ),
     );

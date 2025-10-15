@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:math';
 import '../services/api_service.dart';
-import '../theme/colors.dart';
 import 'versedetailscreen.dart';
 
 class ChapterListScreen extends StatefulWidget {
@@ -67,17 +65,37 @@ class _ChapterListScreenState extends State<ChapterListScreen> with SingleTicker
         child: SafeArea(
           child: Column(
             children: [
-              // Custom Header
+              // Custom Header (STATIC - stays at top)
               _buildHeader(),
               
-              // Inspirational Message with Breathing Animation
-              _buildInspirationCard(),
-              
-              // Chapters List
+              // Chapters List (Now includes the shloka card inside scroll)
               Expanded(
                 child: loading
                     ? _buildLoadingState()
-                    : _buildChaptersList(),
+                    : Column(
+                        children: [
+                          // Move the shloka card INSIDE the scrollable area
+                          Expanded(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.only(top: 0), // Remove top padding
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: chapters.length + 1, // +1 for the shloka card
+                              itemBuilder: (context, index) {
+                                // First item is the shloka card
+                                if (index == 0) {
+                                  return _buildInspirationCard();
+                                }
+                                // Rest are chapter cards
+                                final ch = chapters[index - 1]; // Adjust index
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                                  child: _buildChapterCard(ch, index - 1),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
               ),
             ],
           ),
@@ -248,18 +266,6 @@ class _ChapterListScreenState extends State<ChapterListScreen> with SingleTicker
     );
   }
 
-  Widget _buildChaptersList() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      physics: const BouncingScrollPhysics(),
-      itemCount: chapters.length,
-      itemBuilder: (context, index) {
-        final ch = chapters[index];
-        return _buildChapterCard(ch, index);
-      },
-    );
-  }
-
   Widget _buildChapterCard(dynamic chapter, int index) {
     final chapterNumber = chapter['chapter_number'] ?? (index + 1);
     final name = chapter['name'] ?? 'Unknown';
@@ -336,6 +342,7 @@ class _ChapterListScreenState extends State<ChapterListScreen> with SingleTicker
                     child: Text(
                       '$chapterNumber',
                       style: const TextStyle(
+                        fontFamily: 'NotoSerifDevanagari',
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
