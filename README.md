@@ -1,4 +1,4 @@
-# gita_ai
+# gitapath
 
 A new Flutter project.
 

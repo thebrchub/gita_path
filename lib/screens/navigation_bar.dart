@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import '../screens/homescreen.dart';
-import '../screens/chapterlistscreen.dart';
-import '../screens/askkrishnascreen.dart';
-import '../screens/donationscreen.dart';
+import 'dart:math';
+import 'homescreen.dart';
+import 'chapterlistscreen.dart';
+import 'askkrishnascreen.dart';
+import 'donationscreen.dart';
 import '../widgets/app_drawer.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -35,33 +36,95 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     return Scaffold(
       key: _scaffoldKey,
       drawer: const AppDrawer(),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+      // 🔥 ENABLE DRAWER SWIPE GESTURE with wide edge area
+      drawerEnableOpenDragGesture: true,
+      drawerEdgeDragWidth: min(MediaQuery.of(context).size.width * 0.7, 360),
+      
+      // 🔥 APP BAR with menu button (only on Home screen)
+      appBar: _currentIndex == 0 
+          ? PreferredSize(
+              preferredSize: const Size.fromHeight(0),
+              child: AppBar(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                toolbarHeight: 0,
+              ),
+            )
+          : null,
+      
+      body: Stack(
+        children: [
+          // Main content
+          IndexedStack(
+            index: _currentIndex,
+            children: _screens,
+          ),
+          
+          // 🔥 MENU BUTTON overlay (only on home screen)
+          if (_currentIndex == 0)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              left: 12,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.22),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.5),
+                        width: 0.8,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.04),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.menu,
+                      color: Colors.deepOrange.shade700,
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
+      
+      // 🔥 BOTTOM NAVIGATION BAR
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.topRight,
             colors: [
-              const Color(0xFFFFF5E6).withOpacity(0.95),
-              const Color(0xFFFFE4CC).withOpacity(0.95),
+              const Color(0xFFFFF5E6).withOpacity(0.97),
+              const Color(0xFFFFE4CC).withOpacity(0.97),
             ],
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.orange.shade200.withOpacity(0.3),
-              blurRadius: 20,
-              offset: const Offset(0, -5),
+              color: Colors.orange.shade200.withOpacity(0.22),
+              blurRadius: 16,
+              offset: const Offset(0, -4),
             ),
           ],
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          top: false,
+          child: Container(
+            // slightly smaller height so items fit on narrow screens
+            height: 64,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildNavItem(
                   icon: Icons.home_rounded,
@@ -103,22 +166,34 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _currentIndex = index),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
           decoration: BoxDecoration(
             color: isSelected 
-                ? Colors.white.withOpacity(0.7)
+                ? Colors.white.withOpacity(0.8)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(16),
             border: isSelected
                 ? Border.all(
-                    color: Colors.white.withOpacity(0.5),
-                    width: 1,
+                    color: Colors.white.withOpacity(0.6),
+                    width: 1.5,
                   )
+                : null,
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.orange.shade200.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
                 : null,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Stack(
                 clipBehavior: Clip.none,
@@ -128,12 +203,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     color: isSelected
                         ? Colors.deepOrange.shade700
                         : Colors.grey.shade600,
-                    size: 26,
+                    size: 24,
                   ),
                   if (isPremium && !isSelected)
                     Positioned(
-                      right: -8,
-                      top: -4,
+                      right: -4,
+                      top: -6,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 4,
@@ -142,11 +217,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                         decoration: BoxDecoration(
                           color: Colors.amber,
                           borderRadius: BorderRadius.circular(6),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.amber.withOpacity(0.4),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
                         ),
                         child: const Text(
                           'PRO',
                           style: TextStyle(
-                            fontSize: 7,
+                            fontSize: 8,
                             fontWeight: FontWeight.bold,
                             color: Colors.black87,
                           ),
@@ -159,95 +241,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                   color: isSelected
                       ? Colors.deepOrange.shade700
                       : Colors.grey.shade600,
+                  letterSpacing: 0.15,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// Placeholder screen for Favorites (create the actual screen later)
-class FavoritesPlaceholderScreen extends StatelessWidget {
-  const FavoritesPlaceholderScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFFFFF5E6),
-              const Color(0xFFFFE4CC),
-              const Color(0xFFE3F2FD),
-              const Color(0xFFBBDEFB),
-            ],
-            stops: const [0.0, 0.3, 0.7, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.bookmark_rounded,
-                  size: 80,
-                  color: Colors.deepOrange.shade300,
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Favorites',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.deepOrange.shade700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Your saved verses will appear here',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(height: 30),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                    ),
-                  ),
-                  child: Text(
-                    'Coming Soon!',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.deepOrange.shade700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),

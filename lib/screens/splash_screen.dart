@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/colors.dart';
 import 'login_screen.dart';
-import 'navigation_bar.dart';
+import 'homescreen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -56,7 +56,7 @@ class _SplashScreenState extends State<SplashScreen>
           context,
           MaterialPageRoute(
             builder: (context) => isLoggedIn 
-                ? const MainNavigationScreen() 
+                ? const HomeScreen() 
                 : const LoginScreen(),
           ),
         );

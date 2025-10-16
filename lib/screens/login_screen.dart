@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/colors.dart';
 import 'homescreen.dart';
+import '../services/google_auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -281,7 +282,26 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: _isLoading ? null : _handleGoogleSignIn,
+                      onPressed: _isLoading
+                          ? null
+                          : () async {
+                              setState(() => _isLoading = true);
+                              final ok = await GoogleAuthService.signInAndSendTokenToBackend();
+                              setState(() => _isLoading = false);
+
+                              if (ok) {
+                                // ✅ Navigate to main app or home screen
+                                Navigator.pushReplacementNamed(context, '/home');
+                              } else {
+                                // ❌ Show error snackbar
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Google Sign-In failed. Try again!'),
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                              }
+                            },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: Colors.grey.shade800,

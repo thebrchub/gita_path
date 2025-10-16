@@ -1,121 +1,47 @@
 import 'dart:convert';
-import '../config/api_key.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // Using bhagavadgita.io API (free tier)
-  static const String baseUrl = "https://bhagavadgita.io/api/v1";
-  static const String apiKey = "YOUR_API_KEY_HERE"; // Get from bhagavadgita.io
-  
-  // Alternative: Use bhagavadgitaapi.in (no API key needed)
-  static const String altBaseUrl = "https://bhagavadgitaapi.in";
+  // Using VedicScriptures API (no API key needed)
+  static const String baseUrl = "https://vedicscriptures.github.io";
 
   // Get all 18 chapters
   static Future<List<dynamic>> getChapters() async {
-    const String url = "https://bhagavad-gita3.p.rapidapi.com/v2/chapters/?skip=0&limit=18";
-    const Map<String, String> headers = {
-      "x-rapidapi-host": "bhagavad-gita3.p.rapidapi.com",
-      "x-rapidapi-key": "df18d817b0mshac874949a6a54bdp15a01bjsn18889ceba92a",
-    };
+    // VedicScriptures doesn't have a /chapters/ endpoint
+    // We'll return mock data for chapters list
+    // But you can fetch individual chapters from /chapter/{id}/
+    return _getMockChapters();
+  }
+
+  // Get specific chapter details
+  static Future<Map<String, dynamic>> getChapter(int chapterId) async {
+    final String url = "$baseUrl/chapter/$chapterId/";
 
     try {
-      final response = await http.get(Uri.parse(url), headers: headers);
+      final response = await http.get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data;
+        return jsonDecode(response.body);
       } else {
-        throw Exception("Failed to load chapters: ${response.statusCode}");
+        throw Exception("Failed to load chapter: ${response.statusCode}");
       }
     } catch (e) {
-      print("Error fetching chapters: $e");
-      return _getMockChapters();
+      print("Error fetching chapter: $e");
+      return {};
     }
   }
 
-
-  static Future<List<dynamic>> _getChaptersAlternative(String language) async {
-    try {
-      final response = await http.get(
-        Uri.parse("$altBaseUrl/chapters/"),
-      ).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data;
-      } else {
-        throw Exception('Failed to load chapters');
-      }
-    } catch (e) {
-      print("Alternative API also failed: $e");
-      // Return mock data as last resort
-      return _getMockChapters();
-    }
-  }
-
-  // Get verses for a specific chapter
-  static Future<List<dynamic>> getVerses(int chapterId) async {
-    final String url =
-        "https://bhagavad-gita3.p.rapidapi.com/v2/chapters/$chapterId/verses/";
-    const Map<String, String> headers = {
-      "x-rapidapi-host": "bhagavad-gita3.p.rapidapi.com",
-      "x-rapidapi-key": ApiKeys.rapidApiKey,
-
-    };
-
-    try {
-      final response = await http.get(Uri.parse(url), headers: headers);
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data;
-      } else {
-        throw Exception("Failed to load verses: ${response.statusCode}");
-      }
-    } catch (e) {
-      print("Error fetching verses: $e");
-      return _getMockVerses(chapterId);
-    }
-  }
-
-
-  static Future<List<dynamic>> _getVersesAlternative(int chapterId, String language) async {
-    try {
-      final response = await http.get(
-        Uri.parse("$altBaseUrl/chapter/$chapterId/"),
-      ).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        // Transform data structure to match expected format
-        final List<dynamic> verses = [];
-        for (int i = 1; i <= (data['verses_count'] ?? 0); i++) {
-          verses.add({
-            'verse_number': i,
-            'text': 'Loading verse $i...',
-            'meaning': 'Meaning will be loaded',
-          });
-        }
-        return verses;
-      } else {
-        throw Exception('Failed to load verses');
-      }
-    } catch (e) {
-      print("Alternative verses API failed: $e");
-      return _getMockVerses(chapterId);
-    }
-  }
-
-  // Get specific verse details
+  // Get specific verse details with all translations
   static Future<Map<String, dynamic>> getVerseDetail(
     int chapterId,
     int verseNumber,
-    {String language = 'en'}
   ) async {
+    final String url = "$baseUrl/slok/$chapterId/$verseNumber/";
+    
     try {
-      final response = await http.get(
-        Uri.parse("$altBaseUrl/slok/$chapterId/$verseNumber/"),
-      ).timeout(const Duration(seconds: 10));
+      final response = await http.get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -124,177 +50,244 @@ class ApiService {
       }
     } catch (e) {
       print("Error fetching verse detail: $e");
-      return {};
+      return {
+        'slok': 'Unable to load verse',
+        'transliteration': '',
+        'tej': {
+          'ht': 'Please check your internet connection and try again.'
+        },
+      };
     }
   }
 
-  // Mock data for offline/fallback
+  // Get all verses for a chapter (helper method)
+  static Future<List<Map<String, dynamic>>> getChapterVerses(int chapterId) async {
+    try {
+      // First get chapter info to know verse count
+      final chapter = await getChapter(chapterId);
+      final verseCount = chapter['verses_count'] ?? 0;
+      
+      // Return verse list without fetching all (for performance)
+      return List.generate(
+        verseCount,
+        (index) => {
+          'verse': index + 1,
+          'chapter': chapterId,
+        },
+      );
+    } catch (e) {
+      print("Error generating verses list: $e");
+      return [];
+    }
+  }
+
+  // Mock data for chapters list (since API doesn't provide all chapters endpoint)
   static List<dynamic> _getMockChapters() {
     return [
       {
         'chapter_number': 1,
-        'name': 'Arjuna Vishada Yoga',
-        'translation': 'The Yoga of Arjuna\'s Dejection',
+        'name': 'अर्जुनविषादयोग',
+        'translation': 'Arjuna Visada Yoga',
+        'transliteration': 'Arjun Viṣhād Yog',
         'verses_count': 47,
-        'meaning': 'Chapter 1 describes how Arjuna is overcome with grief and confusion before the battle.',
+        'meaning': {
+          'en': 'Arjuna\'s Dilemma',
+          'hi': 'अर्जुन विषाद योग'
+        },
       },
       {
         'chapter_number': 2,
-        'name': 'Sankhya Yoga',
-        'translation': 'The Yoga of Knowledge',
+        'name': 'सांख्ययोग',
+        'translation': 'Sankhya Yoga',
+        'transliteration': 'Sānkhya Yog',
         'verses_count': 72,
-        'meaning': 'Krishna begins his teachings about the eternal soul and the path of wisdom.',
+        'meaning': {
+          'en': 'Transcendental Knowledge',
+          'hi': 'सांख्य योग'
+        },
       },
       {
         'chapter_number': 3,
-        'name': 'Karma Yoga',
-        'translation': 'The Yoga of Action',
+        'name': 'कर्मयोग',
+        'translation': 'Karma Yoga',
+        'transliteration': 'Karm Yog',
         'verses_count': 43,
-        'meaning': 'Krishna explains the importance of performing one\'s duty without attachment.',
+        'meaning': {
+          'en': 'Path of Action',
+          'hi': 'कर्म योग'
+        },
       },
       {
         'chapter_number': 4,
-        'name': 'Jnana Karma Sanyasa Yoga',
-        'translation': 'The Yoga of Knowledge and Renunciation',
+        'name': 'ज्ञानकर्मसंन्यासयोग',
+        'translation': 'Jnana Karma Sanyasa Yoga',
+        'transliteration': 'Jñāna Karm Sanyās Yog',
         'verses_count': 42,
-        'meaning': 'Krishna reveals his divine nature and the path of renunciation through knowledge.',
+        'meaning': {
+          'en': 'Path of Knowledge and Renunciation',
+          'hi': 'ज्ञान कर्म संन्यास योग'
+        },
       },
       {
         'chapter_number': 5,
-        'name': 'Karma Sanyasa Yoga',
-        'translation': 'The Yoga of Renunciation',
+        'name': 'कर्मसंन्यासयोग',
+        'translation': 'Karma Sanyasa Yoga',
+        'transliteration': 'Karm Sanyās Yog',
         'verses_count': 29,
-        'meaning': 'The path of renunciation and its relationship with action is discussed.',
+        'meaning': {
+          'en': 'Path of Renunciation',
+          'hi': 'कर्म संन्यास योग'
+        },
       },
       {
         'chapter_number': 6,
-        'name': 'Dhyana Yoga',
-        'translation': 'The Yoga of Meditation',
+        'name': 'आत्मसंयमयोग',
+        'translation': 'Atma Samyama Yoga',
+        'transliteration': 'Dhyān Yog',
         'verses_count': 47,
-        'meaning': 'Krishna teaches the practice and benefits of meditation.',
+        'meaning': {
+          'en': 'Path of Meditation',
+          'hi': 'ध्यान योग'
+        },
       },
       {
         'chapter_number': 7,
-        'name': 'Jnana Vijnana Yoga',
-        'translation': 'The Yoga of Knowledge and Wisdom',
+        'name': 'ज्ञानविज्ञानयोग',
+        'translation': 'Jnana Vijnana Yoga',
+        'transliteration': 'Jñāna Vijñāna Yog',
         'verses_count': 30,
-        'meaning': 'The nature of God and different paths to reach Him are explained.',
+        'meaning': {
+          'en': 'Path of Knowledge and Wisdom',
+          'hi': 'ज्ञान विज्ञान योग'
+        },
       },
       {
         'chapter_number': 8,
-        'name': 'Aksara Brahma Yoga',
-        'translation': 'The Yoga of the Imperishable Brahman',
+        'name': 'अक्षरब्रह्मयोग',
+        'translation': 'Aksara Brahma Yoga',
+        'transliteration': 'Akṣhar Brahma Yog',
         'verses_count': 28,
-        'meaning': 'Krishna discusses the nature of God and attaining Him at death.',
+        'meaning': {
+          'en': 'Path to the Supreme',
+          'hi': 'अक्षर ब्रह्म योग'
+        },
       },
       {
         'chapter_number': 9,
-        'name': 'Raja Vidya Raja Guhya Yoga',
-        'translation': 'The Yoga of Royal Knowledge and Secret',
+        'name': 'राजविद्याराजगुह्ययोग',
+        'translation': 'Raja Vidya Raja Guhya Yoga',
+        'transliteration': 'Rāj Vidyā Yog',
         'verses_count': 34,
-        'meaning': 'The most confidential knowledge of devotion is revealed.',
+        'meaning': {
+          'en': 'Sovereign Science and Sovereign Secret',
+          'hi': 'राज विद्या योग'
+        },
       },
       {
         'chapter_number': 10,
-        'name': 'Vibhuti Yoga',
-        'translation': 'The Yoga of Divine Glories',
+        'name': 'विभूतियोग',
+        'translation': 'Vibhuti Yoga',
+        'transliteration': 'Vibhūti Yog',
         'verses_count': 42,
-        'meaning': 'Krishna describes his divine manifestations and opulences.',
+        'meaning': {
+          'en': 'Divine Glories',
+          'hi': 'विभूति योग'
+        },
       },
       {
         'chapter_number': 11,
-        'name': 'Visvarupa Darsana Yoga',
-        'translation': 'The Yoga of the Universal Form',
+        'name': 'विश्वरूपदर्शनयोग',
+        'translation': 'Vishvarupa Darshana Yoga',
+        'transliteration': 'Viśhwarūp Darśhan Yog',
         'verses_count': 55,
-        'meaning': 'Arjuna witnesses Krishna\'s cosmic universal form.',
+        'meaning': {
+          'en': 'Vision of the Universal Form',
+          'hi': 'विश्वरूप दर्शन योग'
+        },
       },
       {
         'chapter_number': 12,
-        'name': 'Bhakti Yoga',
-        'translation': 'The Yoga of Devotion',
+        'name': 'भक्तियोग',
+        'translation': 'Bhakti Yoga',
+        'transliteration': 'Bhakti Yog',
         'verses_count': 20,
-        'meaning': 'The path of devotion and qualities of a devotee are explained.',
+        'meaning': {
+          'en': 'Path of Devotion',
+          'hi': 'भक्ति योग'
+        },
       },
       {
         'chapter_number': 13,
-        'name': 'Ksetra Ksetrajna Vibhaga Yoga',
-        'translation': 'The Yoga of Distinction between Field and Knower',
+        'name': 'क्षेत्रक्षेत्रज्ञविभागयोग',
+        'translation': 'Ksetra Ksetrajna Vibhaga Yoga',
+        'transliteration': 'Kṣhetra Kṣhetrajña Vibhāg Yog',
         'verses_count': 35,
-        'meaning': 'The difference between the body and the soul is described.',
+        'meaning': {
+          'en': 'Distinction between Field and Knower',
+          'hi': 'क्षेत्र क्षेत्रज्ञ विभाग योग'
+        },
       },
       {
         'chapter_number': 14,
-        'name': 'Gunatraya Vibhaga Yoga',
-        'translation': 'The Yoga of the Three Modes of Nature',
+        'name': 'गुणत्रयविभागयोग',
+        'translation': 'Gunatraya Vibhaga Yoga',
+        'transliteration': 'Guṇa Traya Vibhāg Yog',
         'verses_count': 27,
-        'meaning': 'The three modes of material nature are explained.',
+        'meaning': {
+          'en': 'Three Modes of Material Nature',
+          'hi': 'गुण त्रय विभाग योग'
+        },
       },
       {
         'chapter_number': 15,
-        'name': 'Purusottama Yoga',
-        'translation': 'The Yoga of the Supreme Person',
+        'name': 'पुरुषोत्तमयोग',
+        'translation': 'Purusottama Yoga',
+        'transliteration': 'Puruṣhottam Yog',
         'verses_count': 20,
-        'meaning': 'Krishna reveals himself as the Supreme Personality.',
+        'meaning': {
+          'en': 'Path of the Supreme Person',
+          'hi': 'पुरुषोत्तम योग'
+        },
       },
       {
         'chapter_number': 16,
-        'name': 'Daivasura Sampad Vibhaga Yoga',
-        'translation': 'The Yoga of Divine and Demoniac Qualities',
+        'name': 'दैवासुरसंपद्विभागयोग',
+        'translation': 'Daivasura Sampad Vibhaga Yoga',
+        'transliteration': 'Daivāsura Sampad Vibhāg Yog',
         'verses_count': 24,
-        'meaning': 'The difference between divine and demonic natures is discussed.',
+        'meaning': {
+          'en': 'Divine and Demoniac Natures',
+          'hi': 'दैवासुर संपद विभाग योग'
+        },
       },
       {
         'chapter_number': 17,
-        'name': 'Sraddhatraya Vibhaga Yoga',
-        'translation': 'The Yoga of Three Types of Faith',
+        'name': 'श्रद्धात्रयविभागयोग',
+        'translation': 'Sraddhatraya Vibhaga Yoga',
+        'transliteration': 'Śhraddhā Traya Vibhāg Yog',
         'verses_count': 28,
-        'meaning': 'The three types of faith and their manifestations are explained.',
+        'meaning': {
+          'en': 'Three Divisions of Faith',
+          'hi': 'श्रद्धा त्रय विभाग योग'
+        },
       },
       {
         'chapter_number': 18,
-        'name': 'Moksa Sanyasa Yoga',
-        'translation': 'The Yoga of Liberation and Renunciation',
+        'name': 'मोक्षसंन्यासयोग',
+        'translation': 'Moksa Sanyasa Yoga',
+        'transliteration': 'Mokṣha Sanyās Yog',
         'verses_count': 78,
-        'meaning': 'Krishna concludes with the path to liberation and complete surrender.',
+        'meaning': {
+          'en': 'Path of Liberation and Renunciation',
+          'hi': 'मोक्ष संन्यास योग'
+        },
       },
     ];
   }
 
-  static List<dynamic> _getMockVerses(int chapterId) {
-    // Return placeholder verses
-    return List.generate(
-      10,
-      (index) => {
-        'verse_number': index + 1,
-        'text': 'Sanskrit verse text ${index + 1}',
-        'transliteration': 'Transliteration ${index + 1}',
-        'meaning': 'This is the meaning of verse ${index + 1} from chapter $chapterId. Full content will be loaded when online.',
-      },
-    );
-  }
-
-  // AI Integration (for future use)
-  static Future<String> getAIResponse(String question, {String language = 'en'}) async {
+  // AI Integration placeholder
+  static Future<String> getAIResponse(String question) async {
     // TODO: Integrate Gemini API
-    // Example endpoint structure:
-    /*
-    final response = await http.post(
-      Uri.parse('https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent'),
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': 'YOUR_GEMINI_API_KEY',
-      },
-      body: jsonEncode({
-        'contents': [{
-          'parts': [{
-            'text': 'You are Krishna from Bhagavad Gita. Answer this question based on Gita\'s teachings: $question'
-          }]
-        }]
-      }),
-    );
-    */
-    
-    // For now, return mock response
     return "This is a placeholder AI response. Gemini API will be integrated soon!";
   }
 }
