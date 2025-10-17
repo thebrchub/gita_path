@@ -18,6 +18,8 @@ dependencies:
   shared_preferences: ^2.2.2  # For storing user data locally
   share_plus: ^7.2.1
   audioplayers: ^5.2.1
+  url_launcher: ^6.2.1
+  package_info_plus: ^5.0.1
 
 dev_dependencies:
   flutter_test:

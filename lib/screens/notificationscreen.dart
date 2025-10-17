@@ -72,62 +72,72 @@ class _NotificationScreenState extends State<NotificationScreen> {
           child: Column(
             children: [
               // Header
-              Container(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.arrow_back_ios_new,
-                        color: Colors.deepOrange.shade700,
-                        size: 22,
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Notifications',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.deepOrange.shade800,
-                            ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.arrow_back_ios_new,
+                            color: Colors.deepOrange.shade700,
+                            size: 22,
                           ),
-                          if (unreadCount > 0)
-                            Text(
-                              '$unreadCount unread',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey.shade600,
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Notifications',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.deepOrange.shade800,
+                                ),
                               ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (unreadCount > 0)
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            for (var notification in notifications) {
-                              notification['isRead'] = true;
-                            }
-                          });
-                        },
-                        child: Text(
-                          'Mark all read',
-                          style: TextStyle(
-                            color: Colors.deepOrange.shade600,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                              if (unreadCount > 0)
+                                Text(
+                                  '$unreadCount unread',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
-                      ),
-                  ],
-                ),
+                        if (unreadCount > 0)
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                for (var notification in notifications) {
+                                  notification['isRead'] = true;
+                                }
+                              });
+                            },
+                            child: Text(
+                              'Mark all read',
+                              style: TextStyle(
+                                color: Colors.deepOrange.shade600,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Divider(
+                    thickness: 1,
+                    height: 1,
+                    color: Colors.deepOrange.shade100,
+                  ),
+                ],
               ),
 
               // Notifications List

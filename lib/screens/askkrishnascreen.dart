@@ -333,132 +333,109 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
         ),
         child: Column(
           children: [
-            // Elegant AppBar
-            Container(
-              padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + 16,
-                bottom: 20,
-                left: 20,
-                right: 20,
-              ),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white.withOpacity(0.4),
-                    Colors.white.withOpacity(0.2),
-                  ],
-                ),
-                border: Border(
-                  bottom: BorderSide(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 1,
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.only(
+                    top: MediaQuery.of(context).padding.top + 16,
+                    bottom: 20,
+                    left: 20,
+                    right: 20,
                   ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.5),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: Icon(Icons.arrow_back, color: Colors.deepOrange.shade700),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  // Animated Krishna icon
-                  // AnimatedBuilder(
-                  //   animation: _glowController,
-                  //   builder: (context, child) {
-                  //     return Container(
-                  //       padding: const EdgeInsets.all(10),
-                  //       decoration: BoxDecoration(
-                  //         shape: BoxShape.circle,
-                  //         color: Colors.white.withOpacity(0.3),
-                  //         boxShadow: [
-                  //           BoxShadow(
-                  //             color: Colors.orange.shade200.withOpacity(
-                  //               0.3 + _glowController.value * 0.4,
-                  //             ),
-                  //             blurRadius: 20,
-                  //             spreadRadius: 3,
-                  //           ),
-                  //         ],
-                  //       ),
-                  //       // child: Icon(
-                  //       //   Icons.psychology,
-                  //       //   color: Colors.deepOrange.shade600,
-                  //       //   size: 28,
-                  //       // ),
-                  //     );
-                  //   },
-                  // ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Ask Krishna",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.deepOrange.shade800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          "Divine Guidance Powered by AI",
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withOpacity(0.4),
+                        Colors.white.withOpacity(0.2),
                       ],
                     ),
                   ),
-                  if (!isPremiumUser)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.deepOrange.shade200,
-                          width: 1.5,
+                  child: Row(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: Icon(Icons.arrow_back, color: Colors.deepOrange.shade700),
+                          onPressed: () => Navigator.pop(context),
                         ),
                       ),
-                      child: Text(
-                        "$dailyQuestionsLeft/$maxFreeQuestions",
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepOrange.shade700,
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Ask Krishna",
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.deepOrange.shade800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "Divine Guidance Powered by AI",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                  if (isPremiumUser)
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.workspace_premium,
-                        color: Colors.amber.shade700,
-                        size: 24,
-                      ),
-                    ),
-                ],
-              ),
+                      if (!isPremiumUser)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.deepOrange.shade200,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Text(
+                            "$dailyQuestionsLeft/$maxFreeQuestions",
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.deepOrange.shade700,
+                            ),
+                          ),
+                        ),
+                      if (isPremiumUser)
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.workspace_premium,
+                            color: Colors.amber.shade700,
+                            size: 24,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                // Divider consistent with other headers
+                Divider(
+                  thickness: 1,
+                  height: 1,
+                  color: Colors.deepOrange.shade100,
+                ),
+              ],
             ),
+
 
             // Info banner for free users
             if (!isPremiumUser)

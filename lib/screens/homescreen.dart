@@ -239,48 +239,58 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: Column(
             children: [
               // Header
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.menu, color: Colors.deepOrange.shade700, size: 26),
-                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                      tooltip: 'Menu',
-                    ),
-                    Opacity(
-                      opacity: 0.7,
-                      child: Text(
-                        'श्रीभगवानुवाच',
-                        style: AppTheme.devanagari(
-                          fontSize: 16,
-                          color: Colors.deepOrange.shade700,
-                          fontWeight: FontWeight.w600,
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.menu, color: Colors.deepOrange.shade700, size: 26),
+                          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                          tooltip: 'Menu',
                         ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.notifications_outlined, color: Colors.deepOrange.shade700, size: 26),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          PageRouteBuilder(
-                            pageBuilder: (context, animation, secondaryAnimation) => const NotificationScreen(),
-                            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                              return FadeTransition(opacity: animation, child: child);
-                            },
-                            transitionDuration: const Duration(milliseconds: 300),
+                        Opacity(
+                          opacity: 0.7,
+                          child: Text(
+                            'श्रीभगवानुवाच',
+                            style: AppTheme.devanagari(
+                              fontSize: 18,
+                              color: Colors.deepOrange.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        );
-                      },
-                      tooltip: 'Notifications',
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.notifications_outlined, color: Colors.deepOrange.shade700, size: 26),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              PageRouteBuilder(
+                                pageBuilder: (context, animation, secondaryAnimation) => const NotificationScreen(),
+                                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                  return FadeTransition(opacity: animation, child: child);
+                                },
+                                transitionDuration: const Duration(milliseconds: 300),
+                              ),
+                            );
+                          },
+                          tooltip: 'Notifications',
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  Divider(
+                    thickness: 1,
+                    height: 1,
+                    color: Colors.deepOrange.shade100,
+                  ),
+                ],
               ),
+
               
               // Scrollable content
               Expanded(

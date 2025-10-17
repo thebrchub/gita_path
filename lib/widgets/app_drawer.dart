@@ -3,6 +3,11 @@ import '../screens/chapterlistscreen.dart';
 import '../screens/askkrishnascreen.dart';
 import '../screens/donationscreen.dart';
 import '../screens/login_screen.dart';
+import '../screens/privacy_policy_screen.dart';
+import '../screens/terms_of_service_screen.dart';
+import '../screens/about_screen.dart';
+import '../screens/contact_us_screen.dart';
+import '../screens/help_faq_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -259,10 +264,9 @@ class _AppDrawerState extends State<AppDrawer> {
               title: 'Contact Us',
               subtitle: 'support@gitaai.app',
               onTap: () {
-                Navigator.pop(context);
-                // TODO: Open email client
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Opening email...')),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ContactUsScreen()),
                 );
               },
             ),
@@ -293,32 +297,40 @@ class _AppDrawerState extends State<AppDrawer> {
               icon: Icons.info_rounded,
               title: 'About',
               onTap: () {
-                Navigator.pop(context);
-                _showAboutDialog();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AboutScreen()),
+                );
               },
             ),
             _buildMenuItem(
               icon: Icons.privacy_tip_rounded,
               title: 'Privacy Policy',
               onTap: () {
-                Navigator.pop(context);
-                // TODO: Open privacy policy URL
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+                );
               },
             ),
             _buildMenuItem(
               icon: Icons.description_rounded,
               title: 'Terms of Service',
               onTap: () {
-                Navigator.pop(context);
-                // TODO: Open terms URL
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()),
+                );
               },
             ),
             _buildMenuItem(
               icon: Icons.help_rounded,
               title: 'Help & FAQs',
               onTap: () {
-                Navigator.pop(context);
-                // TODO: Open help screen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const HelpFaqScreen()),
+                );
               },
             ),
 
