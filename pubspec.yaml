@@ -46,6 +46,7 @@ flutter:
     - assets/audios/gita_path_app.mp3
     - assets/images/tanpura.png
     - assets/images/chapters/
+    - assets/images/social_logos/
   
   fonts:
     # Primary font for English
