@@ -3,19 +3,7 @@ import 'colors.dart';
 
 class AppTheme {
   // Detect if text contains Devanagari script
-  static String _getFontFamily(String text) {
-    // Devanagari Unicode range: U+0900 to U+097F
-    final devanagariRegex = RegExp(r'[\u0900-\u097F]');
-    // Tamil Unicode range: U+0B80 to U+0BFF
-    final tamilRegex = RegExp(r'[\u0B80-\u0BFF]');
-    
-    if (devanagariRegex.hasMatch(text)) {
-      return 'NotoSansDevanagari';
-    } else if (tamilRegex.hasMatch(text)) {
-      return 'NotoSansTamil';
-    }
-    return 'Poppins';
-  }
+  
 
   static ThemeData get lightTheme {
     return ThemeData(

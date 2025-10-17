@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
-import 'versedetailscreen.dart';
+import '../widgets/chapter_card.dart';
 
 class ChapterListScreen extends StatefulWidget {
   const ChapterListScreen({super.key});
@@ -9,7 +9,8 @@ class ChapterListScreen extends StatefulWidget {
   State<ChapterListScreen> createState() => _ChapterListScreenState();
 }
 
-class _ChapterListScreenState extends State<ChapterListScreen> with SingleTickerProviderStateMixin {
+class _ChapterListScreenState extends State<ChapterListScreen> 
+    with SingleTickerProviderStateMixin {
   List<dynamic> chapters = [];
   bool loading = true;
   late AnimationController _breathingController;
@@ -65,36 +66,27 @@ class _ChapterListScreenState extends State<ChapterListScreen> with SingleTicker
         child: SafeArea(
           child: Column(
             children: [
-              // Custom Header (STATIC - stays at top)
               _buildHeader(),
-              
-              // Chapters List (Now includes the shloka card inside scroll)
               Expanded(
                 child: loading
                     ? _buildLoadingState()
-                    : Column(
-                        children: [
-                          // Move the shloka card INSIDE the scrollable area
-                          Expanded(
-                            child: ListView.builder(
-                              padding: const EdgeInsets.only(top: 0), // Remove top padding
-                              physics: const BouncingScrollPhysics(),
-                              itemCount: chapters.length + 1, // +1 for the shloka card
-                              itemBuilder: (context, index) {
-                                // First item is the shloka card
-                                if (index == 0) {
-                                  return _buildInspirationCard();
-                                }
-                                // Rest are chapter cards
-                                final ch = chapters[index - 1]; // Adjust index
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                                  child: _buildChapterCard(ch, index - 1),
-                                );
-                              },
+                    : ListView.builder(
+                        padding: const EdgeInsets.only(top: 0),
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: chapters.length + 1, // +1 for inspiration card
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
+                            return _buildInspirationCard();
+                          }
+                          final ch = chapters[index - 1];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: ChapterCard(
+                              chapter: ch,
+                              index: index - 1,
                             ),
-                          ),
-                        ],
+                          );
+                        },
                       ),
               ),
             ],
@@ -139,7 +131,6 @@ class _ChapterListScreenState extends State<ChapterListScreen> with SingleTicker
               ],
             ),
           ),
-          // Peaceful Icon
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -264,174 +255,5 @@ class _ChapterListScreenState extends State<ChapterListScreen> with SingleTicker
         ],
       ),
     );
-  }
-
-  Widget _buildChapterCard(dynamic chapter, int index) {
-    final chapterNumber = chapter['chapter_number'] ?? (index + 1);
-    final name = chapter['name'] ?? 'Unknown';
-    final translation = chapter['translation'] ?? '';
-    final meaning = chapter['meaning']?['en'] ?? '';
-    
-    // Colors for different chapters - creating a peaceful palette
-    final colors = _getChapterColors(index);
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: colors,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: colors[0].withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              PageRouteBuilder(
-                pageBuilder: (context, animation, secondaryAnimation) =>
-                    VerseDetailScreen(chapterId: chapterNumber),
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0.1, 0),
-                        end: Offset.zero,
-                      ).animate(CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutCubic,
-                      )),
-                      child: child,
-                    ),
-                  );
-                },
-                transitionDuration: const Duration(milliseconds: 400),
-              ),
-            );
-          },
-          borderRadius: BorderRadius.circular(20),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Chapter Number Circle
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.3),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.5),
-                      width: 2,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$chapterNumber',
-                      style: const TextStyle(
-                        fontFamily: 'NotoSerifDevanagari',
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(width: 16),
-                
-                // Chapter Details
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        translation,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white.withOpacity(0.95),
-                          height: 1.3,
-                        ),
-                      ),
-                      if (meaning.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          meaning.length > 80 
-                              ? '${meaning.substring(0, 80)}...' 
-                              : meaning,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withOpacity(0.85),
-                            height: 1.4,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(width: 12),
-                
-                // Arrow Icon
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: Colors.white.withOpacity(0.9),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  List<Color> _getChapterColors(int index) {
-    final colorSets = [
-      [const Color(0xFF6C63FF), const Color(0xFF8B7FFF)], // Purple
-      [const Color(0xFF00BCD4), const Color(0xFF4DD0E1)], // Cyan
-      [const Color(0xFF9C27B0), const Color(0xFFBA68C8)], // Deep Purple
-      [const Color(0xFFFF9800), const Color(0xFFFFB74D)], // Orange
-      [const Color(0xFF4CAF50), const Color(0xFF81C784)], // Green
-      [const Color(0xFFE91E63), const Color(0xFFF06292)], // Pink
-      [const Color(0xFF3F51B5), const Color(0xFF7986CB)], // Indigo
-      [const Color(0xFFFF5722), const Color(0xFFFF8A65)], // Deep Orange
-      [const Color(0xFF009688), const Color(0xFF4DB6AC)], // Teal
-    ];
-    
-    return colorSets[index % colorSets.length];
   }
 }

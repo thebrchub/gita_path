@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math';
-import '../theme/colors.dart';
 
 class DonationScreen extends StatefulWidget {
   const DonationScreen({super.key});

@@ -7,6 +7,7 @@ import 'chapterlistscreen.dart';
 import 'askkrishnascreen.dart';
 import 'donationscreen.dart';
 import '../theme/app_theme.dart';
+import 'notificationscreen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,11 +16,12 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _floatingController;
   late AudioPlayer _audioPlayer;
   late ScrollController _scrollController;
   bool _isPlaying = false;
+  bool _userWantsAudioOn = false; // MASTER CONTROL - only user can set this
   int currentVerseIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -68,6 +70,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   ];
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      // App going to background or notification slider opened
+      // Just pause, don't change user preference
+      if (_isPlaying) {
+        _audioPlayer.pause();
+        if (mounted) setState(() => _isPlaying = false);
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      // App back to foreground - resume ONLY if user wants audio
+      if (_userWantsAudioOn) {
+        _resumeAudio();
+      }
+    }
+  }
+
+  @override
   void initState() {
     super.initState();
     _floatingController = AnimationController(
@@ -75,15 +96,36 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       vsync: this,
     )..repeat(reverse: true);
     
-  _scrollController = ScrollController();
+    _scrollController = ScrollController();
     
+    // CRITICAL: Set audio context to NOT duck other audio
     _audioPlayer = AudioPlayer();
+    _audioPlayer.setAudioContext(
+      AudioContext(
+        iOS: AudioContextIOS(
+          category: AVAudioSessionCategory.ambient,
+          options: [
+            AVAudioSessionOptions.mixWithOthers,
+          ],
+        ),
+        android: AudioContextAndroid(
+          isSpeakerphoneOn: false,
+          stayAwake: false,
+          contentType: AndroidContentType.music,
+          usageType: AndroidUsageType.media,
+          audioFocus: AndroidAudioFocus.none, // KEY: Don't request audio focus
+        ),
+      ),
+    );
+    
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
+    
+    // REMOVE onPlayerStateChanged listener completely - it causes issues
+    
+    WidgetsBinding.instance.addObserver(this);
     _loadAudioPreference();
     currentVerseIndex = Random().nextInt(dailyVerses.length);
   }
-
-  // _onScroll removed because header shadow is disabled
 
   Future<void> _loadAudioPreference() async {
     final prefs = await SharedPreferences.getInstance();
@@ -93,10 +135,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (!hasOpenedBefore) {
       await prefs.setBool('hasOpenedBefore', true);
       await prefs.setBool('isAudioEnabled', true);
+      _userWantsAudioOn = true;
       _playTanpura();
     } else if (isAudioEnabled) {
+      _userWantsAudioOn = true;
       _playTanpura();
     } else {
+      _userWantsAudioOn = false;
       setState(() => _isPlaying = false);
     }
   }
@@ -111,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       await _audioPlayer.setSource(AssetSource('audios/gita_path_app.mp3'));
       await _audioPlayer.setVolume(0.3);
       await _audioPlayer.resume();
-      setState(() => _isPlaying = true);
+      if (mounted) setState(() => _isPlaying = true);
       await _saveAudioPreference(true);
     } catch (e) {
       if (mounted) {
@@ -125,16 +170,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
+  Future<void> _resumeAudio() async {
+    try {
+      await _audioPlayer.resume();
+      if (mounted) setState(() => _isPlaying = true);
+    } catch (e) {
+      // Silent fail
+    }
+  }
+
   Future<void> _toggleAudio() async {
     try {
       if (_isPlaying) {
+        // User wants to STOP
+        _userWantsAudioOn = false;
         await _audioPlayer.pause();
-        setState(() => _isPlaying = false);
+        if (mounted) setState(() => _isPlaying = false);
         await _saveAudioPreference(false);
       } else {
-        await _audioPlayer.resume();
-        setState(() => _isPlaying = true);
-        await _saveAudioPreference(true);
+        // User wants to PLAY
+        _userWantsAudioOn = true;
+        await _playTanpura();
       }
     } catch (e) {
       // Error handling
@@ -143,6 +199,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _floatingController.dispose();
     _scrollController.dispose();
     _audioPlayer.dispose();
@@ -162,12 +219,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return Scaffold(
       key: _scaffoldKey,
       drawer: const AppDrawer(),
-      // Keep this enabled for edge swipe
       drawerEnableOpenDragGesture: true,
-  // Make the edge swipe area larger so users can open the drawer more easily
-  // Use 70% of screen width but cap at 360 logical pixels for very wide screens.
-  // This gives an intentionally very wide swipe target on phones.
-  drawerEdgeDragWidth: min(MediaQuery.of(context).size.width * 0.7, 360),
+      drawerEdgeDragWidth: min(MediaQuery.of(context).size.width * 0.7, 360),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -185,15 +238,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         child: SafeArea(
           child: Column(
             children: [
-              // 🔥 COMPACT HEADER with animated shadow
+              // Header
               AnimatedContainer(
-                // slightly faster animation for snappier feedback
                 duration: const Duration(milliseconds: 160),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    // No shadow per user request
-                    // (kept empty so there is no visual elevation)
-                  ),
+                decoration: BoxDecoration(),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -214,15 +263,26 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.language, color: Colors.deepOrange.shade700, size: 26),
-                      onPressed: () => _showLanguageDialog(context),
-                      tooltip: 'Language',
+                      icon: Icon(Icons.notifications_outlined, color: Colors.deepOrange.shade700, size: 26),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          PageRouteBuilder(
+                            pageBuilder: (context, animation, secondaryAnimation) => const NotificationScreen(),
+                            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                              return FadeTransition(opacity: animation, child: child);
+                            },
+                            transitionDuration: const Duration(milliseconds: 300),
+                          ),
+                        );
+                      },
+                      tooltip: 'Notifications',
                     ),
                   ],
                 ),
               ),
               
-              // 🔥 SCROLLABLE CONTENT with scroll controller
+              // Scrollable content
               Expanded(
                 child: SingleChildScrollView(
                   controller: _scrollController,
@@ -684,87 +744,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
           ],
-        ),
-      ),
-    );
-  }
-
-  void _showLanguageDialog(BuildContext context) {
-    final languages = [
-      {'name': 'English', 'code': 'en', 'native': 'English'},
-      {'name': 'Hindi', 'code': 'hi', 'native': 'हिन्दी'},
-      {'name': 'Sanskrit', 'code': 'sa', 'native': 'संस्कृत'},
-      {'name': 'Tamil', 'code': 'ta', 'native': 'தமிழ்'},
-    ];
-
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.orange.shade50,
-                Colors.blue.shade50,
-              ],
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Select Language',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.deepOrange.shade800,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ...languages.map((lang) {
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white),
-                  ),
-                  child: ListTile(
-                    title: Text(
-                      lang['native']!,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                    ),
-                    subtitle: Text(
-                      lang['name']!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey.shade600),
-                    onTap: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('${lang['native']} selected'),
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      );
-                    },
-                  ),
-                );
-              }).toList(),
-            ],
-          ),
         ),
       ),
     );

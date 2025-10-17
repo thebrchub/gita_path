@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../theme/colors.dart';
 import '../screens/chapterlistscreen.dart';
 import '../screens/askkrishnascreen.dart';
 import '../screens/donationscreen.dart';

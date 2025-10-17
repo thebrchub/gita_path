@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/splash_screen.dart';
 import 'theme/app_theme.dart';
-import 'screens/navigation_bar.dart';
 
 void main() {
   runApp(const GitaAIApp());
