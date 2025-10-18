@@ -1,6 +1,40 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/colors.dart';
+
+class ChatSession {
+  String id;
+  String title;
+  List<Map<String, String>> messages;
+  DateTime createdAt;
+  DateTime lastMessageAt;
+
+  ChatSession({
+    required this.id,
+    required this.title,
+    required this.messages,
+    required this.createdAt,
+    required this.lastMessageAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'messages': messages,
+    'createdAt': createdAt.toIso8601String(),
+    'lastMessageAt': lastMessageAt.toIso8601String(),
+  };
+
+  factory ChatSession.fromJson(Map<String, dynamic> json) => ChatSession(
+    id: json['id'],
+    title: json['title'],
+    messages: (json['messages'] as List).map((m) => Map<String, String>.from(m)).toList(),
+    createdAt: DateTime.parse(json['createdAt']),
+    lastMessageAt: DateTime.parse(json['lastMessageAt']),
+  );
+}
 
 class AskKrishnaScreen extends StatefulWidget {
   const AskKrishnaScreen({super.key});
@@ -13,21 +47,23 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
     with SingleTickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  List<Map<String, String>> chat = [];
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  
+  List<ChatSession> allSessions = [];
+  ChatSession? currentSession;
   bool loading = false;
   late AnimationController _glowController;
 
-  // Simulate user status (change to true when payment is done)
   bool isPremiumUser = false;
-  int dailyQuestionsLeft = 5; // Free tier: 5 questions per day
+  int dailyQuestionsLeft = 5;
   final int maxFreeQuestions = 5;
 
   @override
   void initState() {
     super.initState();
     _loadUserStatus();
+    _loadAllSessions();
     
-    // Glow animation for Krishna icon
     _glowController = AnimationController(
       duration: const Duration(seconds: 3),
       vsync: this,
@@ -35,40 +71,155 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
   }
 
   Future<void> _loadUserStatus() async {
-    // TODO: Load from SharedPreferences or backend
     setState(() {
       isPremiumUser = false;
       dailyQuestionsLeft = 5;
     });
   }
 
+  Future<void> _loadAllSessions() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sessionsJson = prefs.getString('ask_krishna_sessions');
+      
+      if (sessionsJson != null) {
+        final List<dynamic> decoded = jsonDecode(sessionsJson);
+        allSessions = decoded.map((s) => ChatSession.fromJson(s)).toList();
+        
+        // Sort by last message time (newest first)
+        allSessions.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+        
+        // Load the most recent session
+        if (allSessions.isNotEmpty) {
+          setState(() {
+            currentSession = allSessions.first;
+          });
+        }
+      }
+      
+      // If no sessions exist, create a new one
+      if (currentSession == null) {
+        _createNewChat();
+      }
+      
+      _scrollToBottom();
+    } catch (e) {
+      debugPrint('Error loading sessions: $e');
+      _createNewChat();
+    }
+  }
+
+  Future<void> _saveAllSessions() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sessionsJson = jsonEncode(allSessions.map((s) => s.toJson()).toList());
+      await prefs.setString('ask_krishna_sessions', sessionsJson);
+    } catch (e) {
+      debugPrint('Error saving sessions: $e');
+    }
+  }
+
+  void _createNewChat() {
+    final newSession = ChatSession(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: 'New Conversation',
+      messages: [],
+      createdAt: DateTime.now(),
+      lastMessageAt: DateTime.now(),
+    );
+    
+    setState(() {
+      allSessions.insert(0, newSession);
+      currentSession = newSession;
+    });
+    
+    _saveAllSessions();
+    Navigator.pop(context); // Close drawer
+  }
+
+  void _switchToSession(ChatSession session) {
+    setState(() {
+      currentSession = session;
+    });
+    Navigator.pop(context); // Close drawer
+    _scrollToBottom();
+  }
+
+  void _deleteSession(ChatSession session) {
+    setState(() {
+      allSessions.remove(session);
+      
+      // If we deleted the current session, switch to another or create new
+      if (currentSession?.id == session.id) {
+        if (allSessions.isNotEmpty) {
+          currentSession = allSessions.first;
+        } else {
+          _createNewChat();
+          return; // Don't save yet, _createNewChat will save
+        }
+      }
+    });
+    
+    _saveAllSessions();
+  }
+
+  String _generateTitle(String firstMessage) {
+    // Generate a short title from the first message
+    String title = firstMessage.trim();
+    if (title.length > 40) {
+      title = '${title.substring(0, 40)}...';
+    }
+    return title;
+  }
+
+  void _updateSessionTitle() {
+    if (currentSession != null && currentSession!.messages.isNotEmpty) {
+      final firstUserMessage = currentSession!.messages.firstWhere(
+        (msg) => msg['role'] == 'user',
+        orElse: () => {'text': 'New Conversation'},
+      );
+      
+      if (currentSession!.title == 'New Conversation') {
+        setState(() {
+          currentSession!.title = _generateTitle(firstUserMessage['text'] ?? 'Chat');
+        });
+        _saveAllSessions();
+      }
+    }
+  }
+
   void sendMessage() async {
     final question = _controller.text.trim();
-    if (question.isEmpty) return;
+    if (question.isEmpty || currentSession == null) return;
 
-    // Check if user can ask questions
     if (!isPremiumUser && dailyQuestionsLeft <= 0) {
       _showUpgradeDialog();
       return;
     }
 
     setState(() {
-      chat.add({'role': 'user', 'text': question});
+      currentSession!.messages.add({'role': 'user', 'text': question});
+      currentSession!.lastMessageAt = DateTime.now();
       loading = true;
       if (!isPremiumUser) dailyQuestionsLeft--;
     });
+    
     _controller.clear();
     _scrollToBottom();
+    _updateSessionTitle();
+    await _saveAllSessions();
 
-    // TODO: Replace with actual AI API call (Gemini/Claude)
     await Future.delayed(const Duration(seconds: 2));
     final answer = getMockGitaAnswer(question);
 
     setState(() {
-      chat.add({'role': 'ai', 'text': answer});
+      currentSession!.messages.add({'role': 'ai', 'text': answer});
+      currentSession!.lastMessageAt = DateTime.now();
       loading = false;
     });
+    
     _scrollToBottom();
+    await _saveAllSessions();
   }
 
   String getMockGitaAnswer(String question) {
@@ -97,6 +248,34 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
         );
       }
     });
+  }
+
+  void _showDeleteConfirmDialog(ChatSession session) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Delete Chat?"),
+        content: Text(
+          "Are you sure you want to delete \"${session.title}\"? This action cannot be undone.",
+          style: const TextStyle(height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteSession(session);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showUpgradeDialog() {
@@ -162,7 +341,7 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
               ),
               const SizedBox(height: 28),
               _buildBenefit("✨ Unlimited AI conversations"),
-              _buildBenefit("💾 Save conversation history"),
+              _buildBenefit("💾 Unlimited chat history"),
               _buildBenefit("🎯 Priority responses"),
               _buildBenefit("🔮 Advanced insights from Gita"),
               const SizedBox(height: 24),
@@ -314,9 +493,31 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
     );
   }
 
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final chatDate = DateTime(date.year, date.month, date.day);
+
+    if (chatDate == today) {
+      return 'Today';
+    } else if (chatDate == yesterday) {
+      return 'Yesterday';
+    } else if (now.difference(date).inDays < 7) {
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return days[date.weekday - 1];
+    } else {
+      return '${date.day}/${date.month}/${date.year}';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: _buildHistoryDrawer(),
+      drawerEnableOpenDragGesture: true,
+      drawerEdgeDragWidth: min(MediaQuery.of(context).size.width * 0.7, 360),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -333,290 +534,472 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
         ),
         child: Column(
           children: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top + 16,
-                    bottom: 20,
-                    left: 20,
-                    right: 20,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.white.withOpacity(0.4),
-                        Colors.white.withOpacity(0.2),
-                      ],
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.5),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          icon: Icon(Icons.arrow_back, color: Colors.deepOrange.shade700),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Ask Krishna",
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.deepOrange.shade800,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              "Divine Guidance Powered by AI",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (!isPremiumUser)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: Colors.deepOrange.shade200,
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Text(
-                            "$dailyQuestionsLeft/$maxFreeQuestions",
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.deepOrange.shade700,
-                            ),
-                          ),
-                        ),
-                      if (isPremiumUser)
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.withOpacity(0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.workspace_premium,
-                            color: Colors.amber.shade700,
-                            size: 24,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                // Divider consistent with other headers
-                Divider(
-                  thickness: 1,
-                  height: 1,
-                  color: Colors.deepOrange.shade100,
-                ),
-              ],
-            ),
+            _buildHeader(),
+            if (!isPremiumUser) _buildInfoBanner(),
+            _buildChatArea(),
+            if (loading) _buildLoadingIndicator(),
+            _buildInputArea(),
+          ],
+        ),
+      ),
+    );
+  }
 
-
-            // Info banner for free users
-            if (!isPremiumUser)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.5),
-                  border: Border(
-                    bottom: BorderSide(
-                      color: Colors.white.withOpacity(0.3),
-                    ),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: Colors.deepOrange.shade600,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        "$dailyQuestionsLeft free questions remaining today",
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade700,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.amber.shade400, Colors.orange.shade400],
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: GestureDetector(
-                        onTap: _showUpgradeDialog,
-                        child: Text(
-                          "Upgrade",
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
+  Widget _buildHistoryDrawer() {
+    return Drawer(
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFFFFF5E6),
+              const Color(0xFFFFE4CC),
+              Colors.orange.shade50,
+            ],
+          ),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + 20,
+                bottom: 20,
+                left: 20,
+                right: 20,
+              ),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.white.withOpacity(0.4),
+                    Colors.white.withOpacity(0.2),
                   ],
                 ),
               ),
-
-            // Chat area
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline,
+                    color: Colors.deepOrange.shade700,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      "Chat History",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.deepOrange.shade800,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: Colors.grey.shade600),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: ElevatedButton.icon(
+                onPressed: _createNewChat,
+                icon: const Icon(Icons.add),
+                label: const Text("New Chat"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepOrange.shade600,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
             Expanded(
-              child: chat.isEmpty
-                  ? _buildEmptyState()
+              child: allSessions.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            size: 64,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            "No conversations yet",
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
                   : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(20),
-                      itemCount: chat.length,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      itemCount: allSessions.length,
                       itemBuilder: (context, index) {
-                        final msg = chat[index];
-                        final isUser = msg['role'] == 'user';
-                        return _buildChatBubble(msg, isUser);
+                        final session = allSessions[index];
+                        final isActive = currentSession?.id == session.id;
+                        
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? Colors.deepOrange.withOpacity(0.15)
+                                : Colors.white.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isActive
+                                  ? Colors.deepOrange.shade300
+                                  : Colors.white.withOpacity(0.3),
+                              width: isActive ? 2 : 1,
+                            ),
+                          ),
+                          child: ListTile(
+                            onTap: () => _switchToSession(session),
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.deepOrange.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.chat,
+                                color: Colors.deepOrange.shade600,
+                                size: 20,
+                              ),
+                            ),
+                            title: Text(
+                              session.title,
+                              style: TextStyle(
+                                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                                fontSize: 14,
+                                color: Colors.grey.shade800,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                _formatDate(session.lastMessageAt),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
+                            trailing: IconButton(
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: Colors.grey.shade600,
+                                size: 20,
+                              ),
+                              onPressed: () => _showDeleteConfirmDialog(session),
+                            ),
+                          ),
+                        );
                       },
                     ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
 
-            // Loading indicator
-            if (loading)
+  Widget _buildHeader() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: EdgeInsets.only(
+            top: MediaQuery.of(context).padding.top + 16,
+            bottom: 20,
+            left: 20,
+            right: 20,
+          ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.4),
+                Colors.white.withOpacity(0.2),
+              ],
+            ),
+          ),
+          child: Row(
+            children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.menu, color: Colors.deepOrange.shade700),
+                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.deepOrange.shade600,
-                        ),
+                    Text(
+                      "Ask Krishna",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.deepOrange.shade800,
+                        letterSpacing: 0.5,
                       ),
                     ),
-                    const SizedBox(width: 14),
+                    const SizedBox(height: 2),
                     Text(
-                      "Krishna is contemplating...",
+                      "Divine Guidance Powered by AI",
                       style: TextStyle(
+                        fontSize: 12,
                         color: Colors.grey.shade600,
-                        fontStyle: FontStyle.italic,
-                        fontSize: 14,
                         letterSpacing: 0.3,
                       ),
                     ),
                   ],
                 ),
               ),
-
-            // Input area
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.6),
-                border: Border(
-                  top: BorderSide(
-                    color: Colors.white.withOpacity(0.3),
+              if (!isPremiumUser)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.deepOrange.shade200,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Text(
+                    "$dailyQuestionsLeft/$maxFreeQuestions",
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepOrange.shade700,
+                    ),
                   ),
                 ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.5),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.03),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: TextField(
-                        controller: _controller,
-                        decoration: InputDecoration(
-                          hintText: "Ask Krishna anything...",
-                          hintStyle: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 14,
-                            letterSpacing: 0.2,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 22,
-                            vertical: 14,
-                          ),
-                        ),
-                        maxLines: null,
-                        textCapitalization: TextCapitalization.sentences,
-                        style: const TextStyle(fontSize: 14, height: 1.5),
-                      ),
-                    ),
+              if (isPremiumUser)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withOpacity(0.2),
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(width: 12),
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.deepOrange.shade600,
-                          Colors.orange.shade500,
-                        ],
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.deepOrange.withOpacity(0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.send_rounded, color: Colors.white, size: 22),
-                      onPressed: sendMessage,
-                    ),
+                  child: Icon(
+                    Icons.workspace_premium,
+                    color: Colors.amber.shade700,
+                    size: 24,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        Divider(
+          thickness: 1,
+          height: 1,
+          color: Colors.deepOrange.shade100,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoBanner() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.5),
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.white.withOpacity(0.3),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.info_outline,
+            color: Colors.deepOrange.shade600,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              "$dailyQuestionsLeft free questions remaining today",
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey.shade700,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: _showUpgradeDialog,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.amber.shade400, Colors.orange.shade400],
+                ),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                "Upgrade",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChatArea() {
+    if (currentSession == null) {
+      return const Expanded(
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Expanded(
+      child: currentSession!.messages.isEmpty
+          ? _buildEmptyState()
+          : ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(20),
+              itemCount: currentSession!.messages.length,
+              itemBuilder: (context, index) {
+                final msg = currentSession!.messages[index];
+                final isUser = msg['role'] == 'user';
+                return _buildChatBubble(msg, isUser);
+              },
+            ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Colors.deepOrange.shade600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Text(
+            "Krishna is contemplating...",
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontStyle: FontStyle.italic,
+              fontSize: 14,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputArea() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.6),
+        border: Border(
+          top: BorderSide(
+            color: Colors.white.withOpacity(0.3),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.5),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
+              child: TextField(
+                controller: _controller,
+                decoration: InputDecoration(
+                  hintText: "Ask Krishna anything...",
+                  hintStyle: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 14,
+                    letterSpacing: 0.2,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 14,
+                  ),
+                ),
+                maxLines: null,
+                textCapitalization: TextCapitalization.sentences,
+                style: const TextStyle(fontSize: 14, height: 1.5),
+              ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.deepOrange.shade600,
+                  Colors.orange.shade500,
+                ],
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.deepOrange.withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.send_rounded, color: Colors.white, size: 22),
+              onPressed: sendMessage,
+            ),
+          ),
+        ],
       ),
     );
   }

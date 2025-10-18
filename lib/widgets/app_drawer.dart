@@ -164,16 +164,16 @@ class _AppDrawerState extends State<AppDrawer> {
 
             // Settings Section
             _buildSectionTitle('Settings'),
-            _buildMenuItem(
-              icon: Icons.language_rounded,
-              title: 'Language',
-              subtitle: 'English',
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () {
-                Navigator.pop(context);
-                _showLanguageDialog();
-              },
-            ),
+            // _buildMenuItem(
+            //   icon: Icons.language_rounded,
+            //   title: 'Language',
+            //   subtitle: 'English',
+            //   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            //   onTap: () {
+            //     Navigator.pop(context);
+            //     _showLanguageDialog();
+            //   },
+            // ),
             _buildMenuItem(
               icon: Icons.palette_rounded,
               title: 'Theme',
@@ -197,15 +197,15 @@ class _AppDrawerState extends State<AppDrawer> {
               ),
               onTap: null,
             ),
-            _buildMenuItem(
-              icon: Icons.text_fields_rounded,
-              title: 'Text Size',
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () {
-                Navigator.pop(context);
-                _showTextSizeDialog();
-              },
-            ),
+            // _buildMenuItem(
+            //   icon: Icons.text_fields_rounded,
+            //   title: 'Text Size',
+            //   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            //   onTap: () {
+            //     Navigator.pop(context);
+            //     _showTextSizeDialog();
+            //   },
+            // ),
 
             const Divider(height: 24),
 
