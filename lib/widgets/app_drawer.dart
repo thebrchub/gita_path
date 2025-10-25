@@ -8,6 +8,10 @@ import '../screens/terms_of_service_screen.dart';
 import '../screens/about_screen.dart';
 import '../screens/contact_us_screen.dart';
 import '../screens/help_faq_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_service.dart';
+import '../services/google_auth_service.dart';
+import '../screens/user_profile_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -23,6 +27,8 @@ class _AppDrawerState extends State<AppDrawer> {
   String userName = 'Guest User';
   String userEmail = '';
   String userPhoto = '';
+  String userAbout = '';
+  bool isPro = false;
   int bookmarkCount = 0;
 
   @override
@@ -32,14 +38,71 @@ class _AppDrawerState extends State<AppDrawer> {
   }
 
   Future<void> _loadUserData() async {
-    // TODO: Load from SharedPreferences
-    // final prefs = await SharedPreferences.getInstance();
-    // setState(() {
-    //   isLoggedIn = prefs.getBool('is_logged_in') ?? false;
-    //   userName = prefs.getString('user_name') ?? 'Guest User';
-    //   userEmail = prefs.getString('user_email') ?? '';
-    //   isPremium = prefs.getBool('is_premium') ?? false;
-    // });
+    // Check auth status
+    try {
+      final signedIn = await GoogleAuthService.isSignedIn();
+      if (!mounted) return;
+      setState(() {
+        isLoggedIn = signedIn;
+      });
+
+      if (signedIn) {
+        try {
+          final profile = await ApiService.getUserProfile();
+          if (!mounted) return;
+          setState(() {
+            userName = profile['name'] ?? userName;
+            userEmail = profile['email'] ?? userEmail;
+            userPhoto = profile['profilePicture'] ?? userPhoto;
+            userAbout = profile['about'] ?? userAbout;
+            isPro = profile['pro'] == true;
+            isPremium = isPro;
+          });
+        } catch (e) {
+          // If fetching profile failed or backend doesn't have details,
+          // try to decode stored auth token (JWT) which may contain user claims.
+          try {
+            final claims = await GoogleAuthService.getUserFromAuthToken();
+            if (claims != null && mounted) {
+              setState(() {
+                userName = claims['name'] ?? userName;
+                userEmail = claims['email'] ?? userEmail;
+                userPhoto = claims['picture'] ?? claims['profilePicture'] ?? userPhoto;
+                userAbout = claims['about'] ?? userAbout;
+                isPro = claims['pro'] == true || claims['is_pro'] == true;
+                isPremium = isPro;
+              });
+            }
+          } catch (err) {
+            // ignore
+          }
+          // If still missing, try reading persisted Google profile fields
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            final storedName = prefs.getString('user_name') ?? '';
+            final storedEmail = prefs.getString('user_email') ?? '';
+            final storedPhoto = prefs.getString('user_photo') ?? '';
+            final storedDob = prefs.getString('user_dob') ?? '';
+            final storedAbout = prefs.getString('user_about') ?? '';
+            final storedPro = prefs.getBool('user_pro') ?? false;
+            if (mounted && (storedName.isNotEmpty || storedEmail.isNotEmpty || storedPhoto.isNotEmpty || storedDob.isNotEmpty || storedAbout.isNotEmpty || storedPro)) {
+              setState(() {
+                if (storedName.isNotEmpty) userName = storedName;
+                if (storedEmail.isNotEmpty) userEmail = storedEmail;
+                if (storedPhoto.isNotEmpty) userPhoto = storedPhoto;
+                if (storedAbout.isNotEmpty) userAbout = storedAbout;
+                isPro = storedPro;
+                isPremium = isPro;
+              });
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+    } catch (e) {
+      // print('Error checking sign-in: $e');
+    }
   }
 
   void _handleLogout() {
@@ -450,11 +513,16 @@ class _AppDrawerState extends State<AppDrawer> {
         ),
       ),
       onDetailsPressed: () {
+        Navigator.pop(context);
         if (!isLoggedIn) {
-          Navigator.pop(context);
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const UserProfileScreen()),
           );
         }
       },
@@ -562,37 +630,6 @@ class _AppDrawerState extends State<AppDrawer> {
     );
   }
 
-  void _showLanguageDialog() {
-    final languages = [
-      {'name': 'English', 'native': 'English', 'code': 'en'},
-      {'name': 'Hindi', 'native': 'हिन्दी', 'code': 'hi'},
-      {'name': 'Sanskrit', 'native': 'संस्कृत', 'code': 'sa'},
-      {'name': 'Tamil', 'native': 'தமிழ்', 'code': 'ta'},
-    ];
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Language'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: languages.map((lang) {
-            return ListTile(
-              title: Text(lang['native']!),
-              subtitle: Text(lang['name']!),
-              onTap: () {
-                // TODO: Save language preference
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${lang['native']} selected')),
-                );
-              },
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
 
   void _showThemeDialog() {
     showDialog(
@@ -632,66 +669,6 @@ class _AppDrawerState extends State<AppDrawer> {
     );
   }
 
-  void _showTextSizeDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Text Size'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: ['Small', 'Medium', 'Large', 'Extra Large'].map((size) {
-            return ListTile(
-              title: Text(size),
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: Save text size preference
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('$size text size selected')),
-                );
-              },
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
 
-  void _showAboutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('About Gita AI'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Version 1.0.0',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade700,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Gita AI is a spiritual companion app that brings the timeless wisdom of Bhagavad Gita to your fingertips.',
-              style: TextStyle(fontSize: 14, height: 1.5),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              '🕉️ Free access to all 700 verses\n💡 AI-powered life guidance\n❤️ Built with love for Dharma',
-              style: TextStyle(fontSize: 13, height: 1.6),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
+  
 }

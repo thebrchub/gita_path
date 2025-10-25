@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/colors.dart';
+import '../services/api_service.dart';  // Add this import
 
 class ChatSession {
   String id;
@@ -58,6 +59,11 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
   int dailyQuestionsLeft = 5;
   final int maxFreeQuestions = 5;
 
+  // ADD THESE NEW VARIABLES:
+  String? currentSessionId;  // Track backend session ID
+  bool isLoadingHistory = false;
+  String streamingResponse = '';  // For real-time AI responses
+
   @override
   void initState() {
     super.initState();
@@ -78,6 +84,95 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
   }
 
   Future<void> _loadAllSessions() async {
+  setState(() {
+    isLoadingHistory = true;
+  });
+
+  Future<void> _loadSessionMessages(ChatSession session) async {
+    try {
+      final history = await ApiService.getSessionHistory(session.id);
+      
+      // Convert backend messages to local format
+      final messages = <Map<String, String>>[];
+      for (var msg in history) {
+        // Add user message
+        messages.add({
+          'role': 'user',
+          'text': msg['query'] ?? '',
+        });
+        
+        // Add AI response
+        messages.add({
+          'role': 'ai',
+          'text': msg['response'] ?? '',
+        });
+      }
+      
+      session.messages = messages;
+    } catch (e) {
+      debugPrint('Error loading session messages: $e');
+      // Keep existing messages if API fails
+    }
+  }
+
+  try {
+    // Try to load from backend first
+    final backendSessions = await ApiService.getChatHistory();
+    
+    if (backendSessions.isNotEmpty) {
+      // Convert backend sessions to local format
+      allSessions = backendSessions.map((session) {
+        return ChatSession(
+          id: session['sessionId'] ?? session['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+          title: session['title'] ?? 'Conversation',
+          messages: [], // Will be loaded when session is opened
+          createdAt: session['createdAt'] != null 
+              ? DateTime.parse(session['createdAt']) 
+              : DateTime.now(),
+          lastMessageAt: session['createdAt'] != null 
+              ? DateTime.parse(session['createdAt']) 
+              : DateTime.now(),
+        );
+      }).toList();
+      
+      // Sort by date (newest first)
+      allSessions.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+      
+      // Load the most recent session
+      if (allSessions.isNotEmpty) {
+        await _loadSessionMessages(allSessions.first);
+        setState(() {
+          currentSession = allSessions.first;
+          currentSessionId = allSessions.first.id;
+        });
+      }
+    } else {
+      // No backend sessions, check local storage
+      final prefs = await SharedPreferences.getInstance();
+      final sessionsJson = prefs.getString('ask_krishna_sessions');
+      
+      if (sessionsJson != null) {
+        final List<dynamic> decoded = jsonDecode(sessionsJson);
+        allSessions = decoded.map((s) => ChatSession.fromJson(s)).toList();
+        allSessions.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+        
+        if (allSessions.isNotEmpty) {
+          setState(() {
+            currentSession = allSessions.first;
+          });
+        }
+      }
+    }
+    
+    // If no sessions exist, create a new one
+    if (currentSession == null) {
+      _createNewChat();
+    }
+    
+    _scrollToBottom();
+  } catch (e) {
+    debugPrint('Error loading sessions: $e');
+    // Fallback to local storage
     try {
       final prefs = await SharedPreferences.getInstance();
       final sessionsJson = prefs.getString('ask_krishna_sessions');
@@ -85,29 +180,26 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
       if (sessionsJson != null) {
         final List<dynamic> decoded = jsonDecode(sessionsJson);
         allSessions = decoded.map((s) => ChatSession.fromJson(s)).toList();
-        
-        // Sort by last message time (newest first)
         allSessions.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
         
-        // Load the most recent session
         if (allSessions.isNotEmpty) {
           setState(() {
             currentSession = allSessions.first;
           });
         }
-      }
-      
-      // If no sessions exist, create a new one
-      if (currentSession == null) {
+      } else {
         _createNewChat();
       }
-      
-      _scrollToBottom();
-    } catch (e) {
-      debugPrint('Error loading sessions: $e');
+    } catch (localError) {
+      debugPrint('Error loading local sessions: $localError');
       _createNewChat();
     }
+  } finally {
+    setState(() {
+      isLoadingHistory = false;
+    });
   }
+}
 
   Future<void> _saveAllSessions() async {
     try {
@@ -121,7 +213,7 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
 
   void _createNewChat() {
     final newSession = ChatSession(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: DateTime.now().millisecondsSinceEpoch.toString(), // Temporary ID
       title: 'New Conversation',
       messages: [],
       createdAt: DateTime.now(),
@@ -131,17 +223,27 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
     setState(() {
       allSessions.insert(0, newSession);
       currentSession = newSession;
+      currentSessionId = null; // Will be set when first message is sent
     });
     
     _saveAllSessions();
-    Navigator.pop(context); // Close drawer
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context); // Close drawer if open
+    }
   }
 
-  void _switchToSession(ChatSession session) {
+  Future<void> _switchToSession(ChatSession session) async {
     setState(() {
       currentSession = session;
+      currentSessionId = session.id;
+      isLoadingHistory = true;
     });
+    
     Navigator.pop(context); // Close drawer
+    
+    // Load messages if not already loaded
+    
+    
     _scrollToBottom();
   }
 
@@ -197,29 +299,89 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
       return;
     }
 
+    // Add user message to UI immediately
     setState(() {
       currentSession!.messages.add({'role': 'user', 'text': question});
       currentSession!.lastMessageAt = DateTime.now();
       loading = true;
+      streamingResponse = '';
       if (!isPremiumUser) dailyQuestionsLeft--;
     });
     
     _controller.clear();
     _scrollToBottom();
     _updateSessionTitle();
-    await _saveAllSessions();
 
-    await Future.delayed(const Duration(seconds: 2));
-    final answer = getMockGitaAnswer(question);
-
-    setState(() {
-      currentSession!.messages.add({'role': 'ai', 'text': answer});
-      currentSession!.lastMessageAt = DateTime.now();
-      loading = false;
-    });
-    
-    _scrollToBottom();
-    await _saveAllSessions();
+    try {
+      // If this is the first message (no session ID yet), create new session
+      if (currentSessionId == null) {
+        final session = await ApiService.createNewAISession(question);
+        
+        setState(() {
+          currentSessionId = session['sessionId'];
+          currentSession!.id = currentSessionId!;
+          
+          // Add AI response
+          currentSession!.messages.add({
+            'role': 'ai',
+            'text': session['response'] ?? 'No response received',
+          });
+          currentSession!.lastMessageAt = DateTime.now();
+          loading = false;
+        });
+      } else {
+        // Continue existing conversation with streaming
+        final stream = await ApiService.sendMessageToSession(currentSessionId!, question);
+        
+        // Add placeholder for AI response
+        setState(() {
+          currentSession!.messages.add({'role': 'ai', 'text': ''});
+        });
+        
+        final responseIndex = currentSession!.messages.length - 1;
+        
+        // Stream the response in real-time
+        await for (final chunk in stream) {
+          setState(() {
+            streamingResponse += chunk;
+            currentSession!.messages[responseIndex]['text'] = streamingResponse;
+            currentSession!.lastMessageAt = DateTime.now();
+          });
+          _scrollToBottom();
+        }
+        
+        setState(() {
+          loading = false;
+          streamingResponse = '';
+        });
+      }
+      
+      _scrollToBottom();
+      await _saveAllSessions();
+      
+    } catch (e) {
+      debugPrint('Error sending message: $e');
+      
+      // Fallback to mock response on error
+      setState(() {
+        if (currentSession!.messages.last['role'] == 'ai' && 
+            currentSession!.messages.last['text']!.isEmpty) {
+          // Remove empty AI message
+          currentSession!.messages.removeLast();
+        }
+        
+        currentSession!.messages.add({
+          'role': 'ai',
+          'text': '🕉️ I apologize, but I\'m having trouble connecting right now. Please try again in a moment.\n\nIn the meantime, remember Krishna\'s words: "Perform your duty with a steady mind, without attachment." (BG 2.48)',
+        });
+        currentSession!.lastMessageAt = DateTime.now();
+        loading = false;
+        streamingResponse = '';
+      });
+      
+      _scrollToBottom();
+      await _saveAllSessions();
+    }
   }
 
   String getMockGitaAnswer(String question) {
@@ -872,27 +1034,47 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
   }
 
   Widget _buildChatArea() {
-    if (currentSession == null) {
-      return const Expanded(
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-
+  if (currentSession == null || isLoadingHistory) {
     return Expanded(
-      child: currentSession!.messages.isEmpty
-          ? _buildEmptyState()
-          : ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(20),
-              itemCount: currentSession!.messages.length,
-              itemBuilder: (context, index) {
-                final msg = currentSession!.messages[index];
-                final isUser = msg['role'] == 'user';
-                return _buildChatBubble(msg, isUser);
-              },
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              color: Colors.deepOrange.shade600,
             ),
+            const SizedBox(height: 16),
+            Text(
+              'Loading conversation...',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
+
+  return Expanded(
+    child: currentSession!.messages.isEmpty
+        ? _buildEmptyState()
+        : ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.all(20),
+            itemCount: currentSession!.messages.length,
+            itemBuilder: (context, index) {
+              final msg = currentSession!.messages[index];
+              final isUser = msg['role'] == 'user';
+              final isStreaming = loading && 
+                                  index == currentSession!.messages.length - 1 && 
+                                  !isUser;
+              return _buildChatBubble(msg, isUser, isStreaming);
+            },
+          ),
+  );
+}
 
   Widget _buildLoadingIndicator() {
     return Container(
@@ -912,7 +1094,9 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
           ),
           const SizedBox(width: 14),
           Text(
-            "Krishna is contemplating...",
+            streamingResponse.isEmpty 
+                ? "Krishna is contemplating..." 
+                : "Receiving divine wisdom...",
             style: TextStyle(
               color: Colors.grey.shade600,
               fontStyle: FontStyle.italic,
@@ -1115,59 +1299,77 @@ class _AskKrishnaScreenState extends State<AskKrishnaScreen>
     );
   }
 
-  Widget _buildChatBubble(Map<String, String> msg, bool isUser) {
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.78,
+  Widget _buildChatBubble(Map<String, String> msg, bool isUser, [bool isStreaming = false]) {
+  return Align(
+    alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+    child: Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width * 0.78,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        gradient: isUser
+            ? LinearGradient(
+                colors: [
+                  Colors.deepOrange.shade600,
+                  Colors.orange.shade500,
+                ],
+              )
+            : null,
+        color: isUser ? null : Colors.white.withOpacity(0.7),
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(20),
+          topRight: const Radius.circular(20),
+          bottomLeft: Radius.circular(isUser ? 20 : 6),
+          bottomRight: Radius.circular(isUser ? 6 : 20),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-        decoration: BoxDecoration(
-          gradient: isUser
-              ? LinearGradient(
-                  colors: [
-                    Colors.deepOrange.shade600,
-                    Colors.orange.shade500,
-                  ],
-                )
-              : null,
-          color: isUser ? null : Colors.white.withOpacity(0.7),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(20),
-            topRight: const Radius.circular(20),
-            bottomLeft: Radius.circular(isUser ? 20 : 6),
-            bottomRight: Radius.circular(isUser ? 6 : 20),
+        border: isUser
+            ? null
+            : Border.all(
+                color: Colors.white.withOpacity(0.5),
+                width: 1,
+              ),
+        boxShadow: [
+          BoxShadow(
+            color: isUser
+                ? Colors.deepOrange.withOpacity(0.2)
+                : Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
-          border: isUser
-              ? null
-              : Border.all(
-                  color: Colors.white.withOpacity(0.5),
-                  width: 1,
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            msg['text'] ?? '',
+            style: TextStyle(
+              color: isUser ? Colors.white : Colors.grey.shade800,
+              fontSize: 15,
+              height: 1.6,
+              letterSpacing: 0.2,
+            ),
+          ),
+          if (isStreaming) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Colors.deepOrange.shade400,
                 ),
-          boxShadow: [
-            BoxShadow(
-              color: isUser
-                  ? Colors.deepOrange.withOpacity(0.2)
-                  : Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              ),
             ),
           ],
-        ),
-        child: Text(
-          msg['text'] ?? '',
-          style: TextStyle(
-            color: isUser ? Colors.white : Colors.grey.shade800,
-            fontSize: 15,
-            height: 1.6,
-            letterSpacing: 0.2,
-          ),
-        ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildSuggestionChip(String text) {
     return InkWell(

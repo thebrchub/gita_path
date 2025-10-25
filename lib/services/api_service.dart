@@ -1,9 +1,18 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'google_auth_service.dart';
 
 class ApiService {
-  // Using VedicScriptures API (no API key needed)
-  static const String baseUrl = "https://vedicscriptures.github.io";
+  // VedicScriptures API base URL (for Gita content)
+  static const String vedicScripturesBaseUrl = "https://vedicscriptures.github.io";
+  
+  // Backend API base URL (for user and AI endpoints)
+  static const String backendBaseUrl = "https://sbga.brchub.me";
+
+  // ============================================================================
+  // VEDIC SCRIPTURES APIs (Bhagavad Gita Content)
+  // ============================================================================
 
   // Get all 18 chapters
   static Future<List<dynamic>> getChapters() async {
@@ -15,7 +24,7 @@ class ApiService {
 
   // Get specific chapter details
   static Future<Map<String, dynamic>> getChapter(int chapterId) async {
-    final String url = "$baseUrl/chapter/$chapterId/";
+    final String url = "$vedicScripturesBaseUrl/chapter/$chapterId/";
 
     try {
       final response = await http.get(Uri.parse(url))
@@ -37,7 +46,7 @@ class ApiService {
     int chapterId,
     int verseNumber,
   ) async {
-    final String url = "$baseUrl/slok/$chapterId/$verseNumber/";
+    final String url = "$vedicScripturesBaseUrl/slok/$chapterId/$verseNumber/";
     
     try {
       final response = await http.get(Uri.parse(url))
@@ -285,9 +294,291 @@ class ApiService {
     ];
   }
 
-  // AI Integration placeholder
+  // ============================================================================
+  // USER RESOURCE APIs
+  // ============================================================================
+
+  /// Login with Google ID token
+  /// POST /v1/user/login
+  static Future<Map<String, dynamic>> login(String idToken) async {
+    final String url = "$backendBaseUrl/v1/user/login";
+    
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'idToken': idToken,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Login failed: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print("Error during login: $e");
+      rethrow;
+    }
+  }
+
+  /// Get user profile
+  /// GET /v1/user
+  static Future<Map<String, dynamic>> getUserProfile() async {
+    final String url = "$backendBaseUrl/v1/user";
+    
+    try {
+      final token = await GoogleAuthService.getAuthToken();
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Failed to load user profile: ${response.statusCode}');
+      }
+    } catch (e) {
+      print("Error fetching user profile: $e");
+      rethrow;
+    }
+  }
+
+  /// Update user profile
+  /// Note: The OpenAPI spec doesn't show a PUT/PATCH endpoint for user updates
+  /// Keeping this method for backward compatibility, but may need adjustment
+  static Future<bool> updateUserProfile(Map<String, dynamic> profileData) async {
+    final String url = "$backendBaseUrl/v1/user";
+    
+    try {
+      final token = await GoogleAuthService.getAuthToken();
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      // Try PATCH first
+      http.Response response = await http.patch(
+        Uri.parse(url),
+        headers: headers,
+        body: jsonEncode(profileData),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        return true;
+      }
+
+      if (response.statusCode == 405) {
+        // Try PUT as fallback
+        print('PATCH returned 405; trying PUT.');
+        response = await http.put(
+          Uri.parse(url),
+          headers: headers,
+          body: jsonEncode(profileData),
+        ).timeout(const Duration(seconds: 10));
+
+        if (response.statusCode == 200 || response.statusCode == 204 || response.statusCode == 201) {
+          return true;
+        }
+      }
+
+      print('Failed to update profile. Status: ${response.statusCode}, Body: ${response.body}');
+      throw Exception('Failed to update profile: ${response.statusCode}');
+    } catch (e) {
+      print("Error updating user profile: $e");
+      rethrow;
+    }
+  }
+
+  // ============================================================================
+  // AI RESOURCE APIs
+  // ============================================================================
+
+  /// Create a new AI chat session with an initial query
+  /// POST /v1/ai/new
+  /// Returns AISession with sessionId, title, response, and createdAt
+  static Future<Map<String, dynamic>> createNewAISession(String query) async {
+    final String url = "$backendBaseUrl/v1/ai/new";
+    
+    try {
+      final token = await GoogleAuthService.getAuthToken();
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: headers,
+        body: jsonEncode({
+          'query': query,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Failed to create AI session: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print("Error creating AI session: $e");
+      rethrow;
+    }
+  }
+
+  /// Get all AI chat sessions for the current user
+  /// GET /v1/ai
+  /// Returns list of AISession objects with sessionId, title, createdAt
+  static Future<List<dynamic>> getAISessions() async {
+    final String url = "$backendBaseUrl/v1/ai";
+    
+    try {
+      final token = await GoogleAuthService.getAuthToken();
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      } else {
+        throw Exception('Failed to load AI sessions: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print("Error fetching AI sessions: $e");
+      rethrow;
+    }
+  }
+
+  /// Get chat history for a specific session
+  /// GET /v1/ai/{sessionId}
+  /// Returns list of AIResponse objects with query, response, and createdAt
+  static Future<List<dynamic>> getSessionHistory(String sessionId) async {
+    final String url = "$backendBaseUrl/v1/ai/$sessionId";
+    
+    try {
+      final token = await GoogleAuthService.getAuthToken();
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      } else {
+        throw Exception('Failed to load session history: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print("Error fetching session history: $e");
+      rethrow;
+    }
+  }
+
+  /// Send a new message to an existing AI session (streaming endpoint)
+  /// POST /v1/ai/{sessionId}
+  /// Returns Stream<String> for real-time responses
+  static Future<Stream<String>> sendMessageToSession(String sessionId, String query) async {
+    final String url = "$backendBaseUrl/v1/ai/$sessionId";
+    
+    try {
+      final token = await GoogleAuthService.getAuthToken();
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final request = http.Request('POST', Uri.parse(url));
+      request.headers.addAll(headers);
+      request.body = jsonEncode({
+        'query': query,
+      });
+
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
+
+      if (streamedResponse.statusCode == 201 || streamedResponse.statusCode == 200) {
+        return streamedResponse.stream
+            .transform(utf8.decoder)
+            .transform(const LineSplitter());
+      } else {
+        final responseBody = await streamedResponse.stream.bytesToString();
+        throw Exception('Failed to send message: ${streamedResponse.statusCode} - $responseBody');
+      }
+    } catch (e) {
+      print("Error sending message to session: $e");
+      rethrow;
+    }
+  }
+
+  /// Convenience method: Send message and get complete response (non-streaming)
+  /// Use this if you want to wait for the full response before displaying
+  static Future<String> sendMessageToSessionComplete(String sessionId, String query) async {
+    try {
+      final stream = await sendMessageToSession(sessionId, query);
+      final buffer = StringBuffer();
+      
+      await for (final chunk in stream) {
+        buffer.write(chunk);
+      }
+      
+      return buffer.toString();
+    } catch (e) {
+      print("Error getting complete message response: $e");
+      rethrow;
+    }
+  }
+
+  // ============================================================================
+  // HELPER METHODS FOR AI
+  // ============================================================================
+
+  /// Create a new session and get the session ID (for starting a new chat)
+  static Future<String> startNewChat(String initialMessage) async {
+    try {
+      final session = await createNewAISession(initialMessage);
+      return session['sessionId'] as String;
+    } catch (e) {
+      print("Error starting new chat: $e");
+      rethrow;
+    }
+  }
+
+  /// Get all previous chat sessions with titles and dates
+  static Future<List<Map<String, dynamic>>> getChatHistory() async {
+    try {
+      final sessions = await getAISessions();
+      return sessions.map((session) => session as Map<String, dynamic>).toList();
+    } catch (e) {
+      print("Error getting chat history: $e");
+      return [];
+    }
+  }
+
+  /// Deprecated: Use createNewAISession() and sendMessageToSession() instead
+  @Deprecated('Use createNewAISession() and sendMessageToSession() instead')
   static Future<String> getAIResponse(String question) async {
-    // TODO: Integrate Gemini API
-    return "This is a placeholder AI response. Gemini API will be integrated soon!";
+    try {
+      final session = await createNewAISession(question);
+      return session['response'] ?? 'No response received';
+    } catch (e) {
+      print("Error getting AI response: $e");
+      return "Failed to get response. Please try again.";
+    }
   }
 }
